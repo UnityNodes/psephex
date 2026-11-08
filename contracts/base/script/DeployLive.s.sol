@@ -13,10 +13,12 @@ contract DeployLive is Script {
         uint256 stake = vm.envOr("STAKE_WEI", uint256(0.001 ether));
         string memory question = vm.envString("QUESTION");
         uint64 timeout = uint64(vm.envOr("DISPUTE_TIMEOUT", uint256(1 days)));
+        uint256 fee = vm.envUint("FEE_WEI");
+        uint256 minStake = vm.envUint("MIN_STAKE_WEI");
         vm.startBroadcast(owner);
-        AiOracle aiOracle = new AiOracle(oracle, owner);
-        Dispute dispute = new Dispute(address(aiOracle), timeout);
-        uint256 id = dispute.openDispute{value: stake}(question, counterparty);
+        AiOracle aiOracle = new AiOracle(oracle, owner, fee);
+        Dispute dispute = new Dispute(address(aiOracle), timeout, minStake);
+        uint256 id = dispute.openDispute{value: stake + fee}(question, counterparty, fee);
         vm.stopBroadcast();
         console.log("AiOracle", address(aiOracle));
         console.log("Dispute", address(dispute));

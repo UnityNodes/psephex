@@ -8,10 +8,12 @@ contract DeployDispute is Script {
     function run() external returns (Dispute deployed) {
         address aiOracle = vm.envAddress("AI_ORACLE_ADDRESS");
         uint64 timeout = uint64(vm.envOr("DISPUTE_TIMEOUT", uint256(1 days)));
+        uint256 minStake = vm.envUint("MIN_STAKE_WEI");
         vm.startBroadcast();
-        deployed = new Dispute(aiOracle, timeout);
+        deployed = new Dispute(aiOracle, timeout, minStake);
         vm.stopBroadcast();
         console.log("Dispute", address(deployed));
         console.log("aiOracle", aiOracle);
+        console.log("minStake", minStake);
     }
 }

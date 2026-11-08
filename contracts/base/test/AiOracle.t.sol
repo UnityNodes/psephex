@@ -63,8 +63,8 @@ contract AiOracleTest is Test {
     uint64 internal constant TIMEOUT = 1 days;
 
     function setUp() public {
-        aio = new AiOracle(oracleSigner, owner);
-        dispute = new Dispute(address(aio), TIMEOUT);
+        aio = new AiOracle(oracleSigner, owner, 0);
+        dispute = new Dispute(address(aio), TIMEOUT, 0);
         vm.deal(alice, 10 ether);
         vm.deal(bob, 10 ether);
     }
@@ -77,9 +77,9 @@ contract AiOracleTest is Test {
 
     function test_constructor_rejectsZeroAddresses() public {
         vm.expectRevert(AiOracle.ZeroAddress.selector);
-        new AiOracle(address(0), owner);
+        new AiOracle(address(0), owner, 0);
         vm.expectRevert(AiOracle.ZeroAddress.selector);
-        new AiOracle(oracleSigner, address(0));
+        new AiOracle(oracleSigner, address(0), 0);
     }
 
     function test_setOracle_onlyOwner() public {
@@ -96,7 +96,7 @@ contract AiOracleTest is Test {
         bytes32 expected = keccak256(bytes(QUESTION));
 
         vm.expectEmit(true, true, false, true, address(aio));
-        emit IAiOracle.Asked(1, alice, QUESTION, expected);
+        emit IAiOracle.Asked(1, alice, QUESTION, expected, 0);
 
         vm.prank(alice);
         uint256 id = aio.ask(QUESTION);
@@ -255,7 +255,7 @@ contract AiOracleTest is Test {
 
     function test_dispute_open_storesCaseAndAsksOracle() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
 
         assertEq(id, 1);
         Dispute.Case memory c = dispute.getCase(id);
@@ -273,16 +273,16 @@ contract AiOracleTest is Test {
     function test_dispute_open_rejectsZeroStakeAndZeroCounterparty() public {
         vm.prank(alice);
         vm.expectRevert(Dispute.NoStake.selector);
-        dispute.openDispute(QUESTION, bob);
+        dispute.openDispute(QUESTION, bob, 0);
 
         vm.prank(alice);
         vm.expectRevert(Dispute.ZeroAddress.selector);
-        dispute.openDispute{value: 1 ether}(QUESTION, address(0));
+        dispute.openDispute{value: 1 ether}(QUESTION, address(0), 0);
     }
 
     function test_dispute_yesPaysClaimant() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         uint256 aliceBefore = alice.balance;
         uint256 bobBefore = bob.balance;
 
@@ -300,7 +300,7 @@ contract AiOracleTest is Test {
 
     function test_dispute_noPaysCounterparty() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         uint256 aliceBefore = alice.balance;
         uint256 bobBefore = bob.balance;
 
@@ -318,7 +318,7 @@ contract AiOracleTest is Test {
 
     function test_dispute_unknownEscalatesAndKeepsFunds() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         uint256 aliceBefore = alice.balance;
         uint256 bobBefore = bob.balance;
 
@@ -337,7 +337,7 @@ contract AiOracleTest is Test {
 
     function test_dispute_onAnswer_onlyOracleContract() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
 
         vm.prank(oracleSigner);
         vm.expectRevert(Dispute.OnlyOracle.selector);
@@ -351,7 +351,7 @@ contract AiOracleTest is Test {
     function test_dispute_payoutFailure_surfacesAsCallbackFailed() public {
         RejectingReceiver rejecting = new RejectingReceiver();
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, address(rejecting));
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, address(rejecting), 0);
 
         vm.expectEmit(true, false, false, true, address(aio));
         emit IAiOracle.CallbackFailed(id);
@@ -366,13 +366,13 @@ contract AiOracleTest is Test {
 
     function test_refund_constructorRejectsZeroTimeout() public {
         vm.expectRevert(Dispute.ZeroTimeout.selector);
-        new Dispute(address(aio), 0);
+        new Dispute(address(aio), 0, 0);
     }
 
     function test_refund_openStoresDeadline() public {
         vm.warp(1_000_000);
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         Dispute.Case memory c = dispute.getCase(id);
         assertEq(c.deadline, 1_000_000 + TIMEOUT);
         assertFalse(c.escalated);
@@ -381,7 +381,7 @@ contract AiOracleTest is Test {
 
     function test_refund_unknownAllowsImmediateRefundToClaimant() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         vm.prank(oracleSigner);
         aio.fulfill(id, 0, keccak256(bytes(QUESTION)));
         assertTrue(dispute.getCase(id).escalated);
@@ -402,7 +402,7 @@ contract AiOracleTest is Test {
     function test_refund_noAnswerRevertsBeforeDeadlineThenRefunds() public {
         vm.warp(1_000_000);
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         uint64 deadline = uint64(1_000_000) + TIMEOUT;
 
         vm.expectRevert(abi.encodeWithSelector(Dispute.TooEarly.selector, id, deadline));
@@ -421,7 +421,7 @@ contract AiOracleTest is Test {
 
     function test_refund_twiceReverts() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         vm.prank(oracleSigner);
         aio.fulfill(id, 0, keccak256(bytes(QUESTION)));
         dispute.refund(id);
@@ -431,7 +431,7 @@ contract AiOracleTest is Test {
 
     function test_refund_afterYesSettlementReverts() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         vm.prank(oracleSigner);
         aio.fulfill(id, 2, keccak256(bytes(QUESTION)));
         vm.warp(block.timestamp + TIMEOUT);
@@ -447,7 +447,7 @@ contract AiOracleTest is Test {
 
     function test_refund_lateAnswerAfterRefundDoesNotPayTwice() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         vm.warp(block.timestamp + TIMEOUT);
         dispute.refund(id);
         uint256 bobBefore = bob.balance;
@@ -464,7 +464,7 @@ contract AiOracleTest is Test {
 
     function test_refund_lateYesBeforeRefundStillSettles() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         vm.warp(block.timestamp + TIMEOUT + 1);
         uint256 aliceBefore = alice.balance;
         vm.prank(oracleSigner);
@@ -477,7 +477,7 @@ contract AiOracleTest is Test {
     function test_refund_rescuesStakeAfterFailedPayout() public {
         RejectingReceiver rejecting = new RejectingReceiver();
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, address(rejecting));
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, address(rejecting), 0);
         vm.prank(oracleSigner);
         aio.fulfill(id, 2, keccak256(bytes(QUESTION)));
         assertEq(address(dispute).balance, 1 ether);
@@ -493,8 +493,8 @@ contract AiOracleTest is Test {
 
     function test_refund_disputesAreIndependent() public {
         vm.startPrank(alice);
-        uint256 a = dispute.openDispute{value: 1 ether}(QUESTION, bob);
-        uint256 b = dispute.openDispute{value: 2 ether}(QUESTION, bob);
+        uint256 a = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
+        uint256 b = dispute.openDispute{value: 2 ether}(QUESTION, bob, 0);
         vm.stopPrank();
         vm.prank(oracleSigner);
         aio.fulfill(a, 0, keccak256(bytes(QUESTION)));
@@ -507,7 +507,7 @@ contract AiOracleTest is Test {
     function testFuzz_refund_neverBeforeDeadlineWithoutUnknown(uint64 elapsed) public {
         vm.warp(1_000_000);
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         elapsed = uint64(bound(elapsed, 0, TIMEOUT - 1));
         vm.warp(1_000_000 + uint256(elapsed));
         vm.expectRevert(abi.encodeWithSelector(Dispute.TooEarly.selector, id, uint64(1_000_000) + TIMEOUT));
@@ -543,24 +543,20 @@ contract AiOracleTest is Test {
         assertEq(abi.encodeWithSelector(IAiOracle.fulfill.selector, uint256(258), uint8(1), h), expected);
     }
 
-    function test_review_fulfillDisputePathGasUnder150kLimit() public {
+    function test_review_fulfillUnder150kRevertsInsteadOfStarvingCallback() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
-        uint256 aliceBefore = alice.balance;
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         uint256 callGas = 150_000 - 21_000 - 16 * 36 - 4 * 64;
         vm.prank(oracleSigner);
-        uint256 before = gasleft();
+        vm.expectPartialRevert(AiOracle.InsufficientGasForCallback.selector);
         aio.fulfill{gas: callGas}(id, 1, keccak256(bytes(QUESTION)));
-        uint256 used = before - gasleft();
-        emit log_named_uint("fulfill+dispute callback gas used", used);
-        assertTrue(aio.getRequest(id).fulfilled);
-        assertTrue(dispute.getCase(id).settled, "dispute callback starved under 150k tx gas limit");
-        assertEq(alice.balance - aliceBefore, 1 ether);
+        assertFalse(aio.getRequest(id).fulfilled);
+        assertFalse(dispute.getCase(id).settled);
     }
 
     function test_review_fulfillDisputePathGasUnder300kLimit() public {
         vm.prank(alice);
-        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob);
+        uint256 id = dispute.openDispute{value: 1 ether}(QUESTION, bob, 0);
         uint256 callGas = 300_000 - 21_000 - 16 * 36 - 4 * 64;
         vm.prank(oracleSigner);
         uint256 before = gasleft();
