@@ -332,7 +332,7 @@ export class Repository {
 
   countOriginBefore(origin: string, id: number, sinceMs: number): number {
     const row = this.#db
-      .prepare("SELECT COUNT(*) AS n FROM requests WHERE origin = ? AND id < ? AND created_at >= ?")
+      .prepare("SELECT COUNT(*) AS n FROM requests WHERE origin = ? AND id < ? AND created_at >= ? AND status <> 'rejected'")
       .get(origin, id, sinceMs) as { n: number };
     return row.n;
   }

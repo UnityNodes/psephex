@@ -191,8 +191,12 @@ export class FakeBase implements BaseChainPort {
   origins = new Map<Hex, Address>();
   logCalls: [bigint, bigint][] = [];
 
+  headStep = 0n;
+
   async headBlock(): Promise<bigint> {
-    return this.head;
+    const current = this.head;
+    this.head += this.headStep;
+    return current;
   }
 
   async askedEvents(fromBlock: bigint, toBlock: bigint): Promise<AskedEvent[]> {

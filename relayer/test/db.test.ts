@@ -66,6 +66,8 @@ describe("repository", () => {
     expect(repo.countOriginBefore("0xaaa", 3, 0)).toBe(2);
     expect(repo.countOriginBefore("0xaaa", 3, 5_000)).toBe(0);
     expect(repo.countOriginBefore("0xbbb", 3, 0)).toBe(0);
+    repo.updateRequest(1, { status: "rejected", reason: "already fulfilled on Base" });
+    expect(repo.countOriginBefore("0xaaa", 3, 0)).toBe(1);
   });
 
   it("tracks model attempts, completions and signatures separately", () => {

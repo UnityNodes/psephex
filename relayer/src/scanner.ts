@@ -31,10 +31,13 @@ export class Scanner {
     this.#d = deps;
   }
 
-  async poll(): Promise<PollResult | null> {
+  async #safeHead(): Promise<bigint> {
+    return (await this.#d.base.headBlock()) - BigInt(this.#d.settings.confirmations - 1);
+  }
+
+  async poll(target?: bigint): Promise<PollResult | null> {
     const { repo, base, settings } = this.#d;
-    const head = await base.headBlock();
-    const safeHead = head - BigInt(settings.confirmations - 1);
+    const safeHead = target ?? (await this.#safeHead());
     const cursor = repo.getCursor("base");
     const from = cursor === null ? settings.startBlock : cursor + 1n;
     if (from > safeHead) return null;
@@ -50,9 +53,14 @@ export class Scanner {
     return { from, to, found: events.length };
   }
 
+  /**
+   * Base Sepolia produces a block every 200 ms, faster than one getLogs round trip, so
+   * polling up to the live head never ends. Catch-up stops at the safe head seen at the start.
+   */
   async catchUp(): Promise<number> {
+    const target = await this.#safeHead();
     let rounds = 0;
-    while (rounds < MAX_CATCH_UP_ROUNDS && (await this.poll()) !== null) rounds++;
+    while (rounds < MAX_CATCH_UP_ROUNDS && (await this.poll(target)) !== null) rounds++;
     return rounds;
   }
 

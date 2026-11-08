@@ -59,12 +59,15 @@ function build(config: RelayerConfig, log: Log): Services {
 }
 
 async function loop(services: Services, config: RelayerConfig, log: Log, once: boolean, stop: () => boolean): Promise<void> {
+  const startHead = await services.base.headBlock();
   while (!stop()) {
+    const started = Date.now();
     try {
       await services.scanner.catchUp();
       const summary = await services.processor.drain();
-      if (summary.processed.length > 0) log.info({ ...summary }, "queue pass");
-      if (once && services.repo.listActive().length === 0) return;
+      if (summary.processed.length > 0) log.info({ ...summary, ms: Date.now() - started }, "queue pass");
+      const scanned = services.repo.getCursor("base") ?? -1n;
+      if (once && services.repo.listActive().length === 0 && scanned >= startHead) return;
     } catch (err) {
       log.error({ err: err instanceof Error ? err.message : String(err) }, "loop iteration failed");
     }

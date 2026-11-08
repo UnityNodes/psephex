@@ -94,7 +94,7 @@ describe("loadConfig", () => {
     const c = loadConfig(env);
     expect(c.aiOracleAddress).toBe(AIORACLE);
     expect(c.maxFeePerGas).toBe(2_000_000_000n);
-    expect(c).toMatchObject({ baseChainId: 84532, confirmations: 3, startBlock: 0n, logBlockRange: 200n, stuckMs: 1_800_000, maxQueue: 50, feeBaseMultiplier: 4, nearAiBaseUrl: "https://cloud-api.near.ai" });
+    expect(c).toMatchObject({ baseChainId: 84532, confirmations: 10, startBlock: 0n, logBlockRange: 200n, stuckMs: 1_800_000, maxQueue: 50, feeBaseMultiplier: 4, nearAiBaseUrl: "https://cloud-api.near.ai" });
   });
 
   it("reads overrides", () => {

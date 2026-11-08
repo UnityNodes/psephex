@@ -40,6 +40,14 @@ describe("Scanner", () => {
     expect(await s.poll()).toBeNull();
   });
 
+  it("stops catching up at the head it saw first even when new blocks keep coming", async () => {
+    base.head = 300n;
+    base.headStep = 1n;
+    const rounds = await scanner(100n).catchUp();
+    expect(rounds).toBeLessThanOrEqual(3);
+    expect(repo.getCursor("base")).toBe(299n);
+  });
+
   it("resumes from the stored cursor after a restart", async () => {
     base.head = 200n;
     await scanner().catchUp();

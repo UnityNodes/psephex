@@ -105,7 +105,7 @@ export function loadConfig(env: Env): RelayerConfig {
     oracleEvmAddress: address(env, "ORACLE_EVM_ADDRESS"),
     baseChainId: positiveInt(env, "BASE_CHAIN_ID", 84532),
     startBlock: nonNegativeBigInt(env, "START_BLOCK", "0"),
-    confirmations: positiveInt(env, "CONFIRMATIONS", 3),
+    confirmations: positiveInt(env, "CONFIRMATIONS", 10),
     pollMs: positiveInt(env, "POLL_MS", 5000),
     logBlockRange: BigInt(positiveInt(env, "LOG_BLOCK_RANGE", 200)),
     maxFeePerGas: maxFeeGwei(env),
