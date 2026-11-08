@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public TEE attestation keys (model signing_key, OHTTP key_config) in evidence runs"
+paths = ['''docs/evidence/runs/.*attestation\.json$''']
+regexTarget = "line"
+regexes = ['''"(signing_key|key_config|ohttp_key_config)"\s*:''']
