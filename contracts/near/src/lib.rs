@@ -8,11 +8,15 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
 const SIGN_GAS: Gas = Gas::from_tgas(50);
-const CALLBACK_GAS: Gas = Gas::from_tgas(10);
+const CALLBACK_GAS: Gas = Gas::from_tgas(20);
 const EVM_GAS_LIMIT: u128 = 300_000;
 const FIXED_SEED: u64 = 42;
 const MAX_TOKENS: u32 = 8;
 const MIN_MODELS: u32 = 3;
+const MAX_QUESTION_BYTES: usize = 2000;
+const SCHEME_NEARAI_V1: &str = "nearai-v1";
+const EVENT_STANDARD: &str = "psephex";
+const EVENT_VERSION: &str = "1.0.0";
 const FULFILL_SIGNATURE: &str = "fulfill(uint256,uint8,bytes32)";
 
 const ANSWER_UNKNOWN: u8 = 0;
@@ -27,8 +31,27 @@ pub struct AiOracle {
     path: String,
     base_chain_id: u64,
     base_oracle_address: String,
-    model_keys: IterableMap<String, Vec<u8>>,
+    model_keys: IterableMap<String, ModelKey>,
     fulfilled: IterableSet<u64>,
+    relayers: IterableSet<AccountId>,
+    pending: IterableSet<u64>,
+    max_fee_per_gas_cap: u128,
+}
+
+#[near(serializers = [borsh])]
+#[derive(Clone)]
+pub struct ModelKey {
+    provider: String,
+    scheme: String,
+    public_key: Vec<u8>,
+}
+
+#[near(serializers = [json])]
+pub struct ModelInfo {
+    pub model: String,
+    pub provider: String,
+    pub scheme: String,
+    pub public_key: String,
 }
 
 #[derive(Serialize)]
@@ -70,6 +93,7 @@ pub struct ModelAnswer {
 }
 
 #[near(serializers = [json])]
+#[derive(Clone)]
 pub struct Vote {
     pub model: String,
     pub answer: String,
@@ -132,6 +156,13 @@ fn extract_content(response_body: &str) -> Result<String, String> {
         .ok_or_else(|| "choices[0].message.content missing".to_string())
 }
 
+fn check_question_len(question: &str) -> Result<(), String> {
+    if question.len() > MAX_QUESTION_BYTES {
+        return Err(format!("question too long: {} bytes, max {MAX_QUESTION_BYTES}", question.len()));
+    }
+    Ok(())
+}
+
 fn fulfill_selector() -> [u8; 4] {
     let hash = env::keccak256_array(FULFILL_SIGNATURE.as_bytes());
     [hash[0], hash[1], hash[2], hash[3]]
@@ -151,7 +182,15 @@ fn fulfill_calldata(request_id: u64, answer_code: u8, question_hash: [u8; 32]) -
 #[near]
 impl AiOracle {
     #[init]
-    pub fn new(owner: AccountId, signer: AccountId, path: String, base_chain_id: u64, base_oracle_address: String) -> Self {
+    pub fn new(
+        owner: AccountId,
+        signer: AccountId,
+        path: String,
+        base_chain_id: u64,
+        base_oracle_address: String,
+        max_fee_per_gas_cap: U128,
+    ) -> Self {
+        require!(max_fee_per_gas_cap.0 > 0, "fee cap must be positive");
         Self {
             owner,
             signer,
@@ -160,6 +199,9 @@ impl AiOracle {
             base_oracle_address: normalize_address(&base_oracle_address),
             model_keys: IterableMap::new(b"m"),
             fulfilled: IterableSet::new(b"f"),
+            relayers: IterableSet::new(b"r"),
+            pending: IterableSet::new(b"p"),
+            max_fee_per_gas_cap: max_fee_per_gas_cap.0,
         }
     }
 
@@ -167,10 +209,47 @@ impl AiOracle {
         require!(env::predecessor_account_id() == self.owner, "only owner");
     }
 
-    pub fn set_model_key(&mut self, model: String, public_key_hex: String) {
+    fn assert_owner_or_relayer(&self) {
+        let caller = env::predecessor_account_id();
+        require!(caller == self.owner || self.relayers.contains(&caller), "only owner or relayer");
+    }
+
+    pub fn add_relayer(&mut self, account_id: AccountId) -> bool {
         self.assert_owner();
-        let key = decode_hex_exact(&public_key_hex, 32, "public key").unwrap_or_else(|e| env::panic_str(&e));
-        self.model_keys.insert(model, key);
+        self.relayers.insert(account_id)
+    }
+
+    pub fn remove_relayer(&mut self, account_id: AccountId) -> bool {
+        self.assert_owner();
+        self.relayers.remove(&account_id)
+    }
+
+    pub fn relayers(&self) -> Vec<AccountId> {
+        self.relayers.iter().cloned().collect()
+    }
+
+    pub fn set_max_fee_per_gas_cap(&mut self, cap: U128) {
+        self.assert_owner();
+        require!(cap.0 > 0, "fee cap must be positive");
+        self.max_fee_per_gas_cap = cap.0;
+    }
+
+    pub fn max_fee_per_gas_cap(&self) -> U128 {
+        U128(self.max_fee_per_gas_cap)
+    }
+
+    pub fn set_model_key(&mut self, model: String, provider: String, scheme: String, public_key_hex: String) {
+        self.assert_owner();
+        let provider = provider.trim().to_string();
+        require!(!provider.is_empty(), "provider must not be empty");
+        if scheme != SCHEME_NEARAI_V1 {
+            env::panic_str(&format!("unsupported signature scheme: {scheme}"));
+        }
+        let public_key = decode_hex_exact(&public_key_hex, 32, "public key").unwrap_or_else(|e| env::panic_str(&e));
+        if let Some((other, _)) = self.model_keys.iter().find(|(m, k)| **m != model && k.public_key == public_key) {
+            env::panic_str(&format!("public key already registered for model {other}"));
+        }
+        self.model_keys.insert(model, ModelKey { provider, scheme, public_key });
     }
 
     pub fn remove_model_key(&mut self, model: String) {
@@ -190,11 +269,21 @@ impl AiOracle {
 
     pub fn reset_fulfilled(&mut self, request_id: u64) -> bool {
         self.assert_owner();
-        self.fulfilled.remove(&request_id)
+        let was_pending = self.pending.remove(&request_id);
+        let was_fulfilled = self.fulfilled.remove(&request_id);
+        was_pending || was_fulfilled
     }
 
-    pub fn models(&self) -> Vec<(String, String)> {
-        self.model_keys.iter().map(|(m, k)| (m.clone(), hex::encode(k))).collect()
+    pub fn models(&self) -> Vec<ModelInfo> {
+        self.model_keys
+            .iter()
+            .map(|(model, key)| ModelInfo {
+                model: model.clone(),
+                provider: key.provider.clone(),
+                scheme: key.scheme.clone(),
+                public_key: hex::encode(&key.public_key),
+            })
+            .collect()
     }
 
     pub fn config(&self) -> Value {
@@ -212,7 +301,12 @@ impl AiOracle {
         self.fulfilled.contains(&request_id)
     }
 
+    pub fn is_pending(&self, request_id: u64) -> bool {
+        self.pending.contains(&request_id)
+    }
+
     pub fn build_request(&self, request_id: u64, question: String, model: String) -> String {
+        check_question_len(&question).unwrap_or_else(|e| env::panic_str(&e));
         let content = format!(
             "You are a neutral oracle resolving request #{} for the AiOracle contract 0x{} on EVM chain {}. Question: {} Answer with exactly one word: YES, NO or UNKNOWN.",
             request_id, self.base_oracle_address, self.base_chain_id, question
@@ -252,7 +346,10 @@ impl AiOracle {
         let Some(key) = self.model_keys.get(model) else {
             return (signed_text, Err("unknown model".to_string()));
         };
-        let public_key: [u8; 32] = key.as_slice().try_into().unwrap();
+        if key.scheme != SCHEME_NEARAI_V1 {
+            return (signed_text, Err(format!("unsupported signature scheme: {}", key.scheme)));
+        }
+        let public_key: [u8; 32] = key.public_key.as_slice().try_into().unwrap();
         let signature = match decode_hex_exact(signature_hex, 64, "signature") {
             Ok(s) => s,
             Err(e) => return (signed_text, Err(e)),
@@ -275,6 +372,9 @@ impl AiOracle {
         response_body: String,
         signature_hex: String,
     ) -> VerifyResult {
+        if let Err(reason) = check_question_len(&question) {
+            return VerifyResult { ok: false, answer: String::new(), reason, signed_text: String::new() };
+        }
         let (signed_text, checked) = self.check_signed_answer(request_id, question, &model, &response_body, &signature_hex);
         match checked {
             Ok(Ok(answer)) => VerifyResult { ok: true, answer, reason: String::new(), signed_text },
@@ -286,6 +386,9 @@ impl AiOracle {
         let total = self.model_keys.len();
         let required = total / 2 + 1;
         let fail = |reason: String| ConsensusResult { ok: false, answer: String::new(), reason, required, votes: vec![] };
+        if let Err(reason) = check_question_len(&question) {
+            return fail(reason);
+        }
         if total < MIN_MODELS {
             return fail(format!("at least {MIN_MODELS} registered models required"));
         }
@@ -344,7 +447,6 @@ impl AiOracle {
         }
     }
 
-    #[payable]
     pub fn fulfill_on_base(
         &mut self,
         request_id: u64,
@@ -354,13 +456,18 @@ impl AiOracle {
         max_fee_per_gas: U128,
         max_priority_fee_per_gas: U128,
     ) -> Promise {
-        self.assert_owner();
+        self.assert_owner_or_relayer();
         require!(!self.fulfilled.contains(&request_id), "request already fulfilled");
+        require!(!self.pending.contains(&request_id), "request signing in progress");
+        require!(max_fee_per_gas.0 <= self.max_fee_per_gas_cap, "max_fee_per_gas above cap");
+        require!(max_priority_fee_per_gas.0 <= max_fee_per_gas.0, "max_priority_fee_per_gas above max_fee_per_gas");
+        check_question_len(&question).unwrap_or_else(|e| env::panic_str(&e));
         let consensus = self.verify_consensus(request_id, question.clone(), answers);
         if !consensus.ok {
             env::panic_str(&consensus.reason);
         }
-        let built = self.build_fulfill_tx(request_id, question, consensus.answer, nonce, max_fee_per_gas, max_priority_fee_per_gas);
+        let built = self.build_fulfill_tx(request_id, question, consensus.answer.clone(), nonce, max_fee_per_gas, max_priority_fee_per_gas);
+        self.pending.insert(request_id);
         let args = json!({
             "request": {
                 "path": self.path,
@@ -378,7 +485,7 @@ impl AiOracle {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(CALLBACK_GAS)
-                    .on_signed(request_id, built.unsigned_tx, built.payload),
+                    .on_signed(request_id, built.unsigned_tx, built.payload, consensus.answer, consensus.votes),
             )
     }
 
@@ -389,13 +496,32 @@ impl AiOracle {
         request_id: u64,
         unsigned_tx: String,
         payload: String,
+        answer: String,
+        votes: Vec<Vote>,
     ) -> Value {
+        self.pending.remove(&request_id);
         match result {
             Ok(signature) => {
                 self.fulfilled.insert(request_id);
+                let event = json!({
+                    "standard": EVENT_STANDARD,
+                    "version": EVENT_VERSION,
+                    "event": "fulfilled",
+                    "data": [{ "request_id": request_id, "answer": answer, "votes": votes }]
+                });
+                env::log_str(&format!("EVENT_JSON:{event}"));
                 json!({ "ok": true, "request_id": request_id, "unsigned_tx": unsigned_tx, "payload": payload, "signature": signature })
             }
-            Err(_) => json!({ "ok": false, "request_id": request_id, "unsigned_tx": unsigned_tx, "payload": payload }),
+            Err(_) => {
+                let event = json!({
+                    "standard": EVENT_STANDARD,
+                    "version": EVENT_VERSION,
+                    "event": "sign_failed",
+                    "data": [{ "request_id": request_id }]
+                });
+                env::log_str(&format!("EVENT_JSON:{event}"));
+                json!({ "ok": false, "request_id": request_id, "unsigned_tx": unsigned_tx, "payload": payload })
+            }
         }
     }
 }
@@ -412,6 +538,7 @@ mod tests {
     const BASE_ORACLE: &str = "0x1111111111111111111111111111111111111111";
     const CHAIN_ID: u64 = 84532;
     const SELECTOR_FROM_CAST_SIG: [u8; 4] = [0x3b, 0x3b, 0x45, 0x8b];
+    const FEE_CAP: U128 = U128(2_000_000_000);
 
     fn test_key() -> SigningKey {
         let mut secret = [0u8; 32];
@@ -433,9 +560,10 @@ mod tests {
             "base-1".to_string(),
             CHAIN_ID,
             BASE_ORACLE.to_string(),
+            FEE_CAP,
         );
         let pk = test_key().verifying_key();
-        c.set_model_key(MODEL.to_string(), hex::encode(pk.as_bytes()));
+        c.set_model_key(MODEL.to_string(), PROVIDER.to_string(), SCHEME.to_string(), hex::encode(pk.as_bytes()));
         c
     }
 
@@ -619,7 +747,7 @@ mod tests {
         assert_eq!(format!("0x{}", hex::encode(&data[68..100])), qh);
         assert_eq!(built.payload.len(), 64);
         assert!(built.unsigned_tx.starts_with("02"));
-        assert_eq!(built.payload, hex::encode(env::keccak256_array(&hex::decode(&built.unsigned_tx).unwrap())));
+        assert_eq!(built.payload, hex::encode(env::keccak256_array(hex::decode(&built.unsigned_tx).unwrap())));
         let unsigned = hex::decode(&built.unsigned_tx).unwrap();
         let to = hex::decode(BASE_ORACLE.trim_start_matches("0x")).unwrap();
         assert!(unsigned.windows(20).any(|w| w == to.as_slice()));
@@ -640,14 +768,14 @@ mod tests {
     fn only_owner_sets_keys() {
         let mut c = setup();
         testing_env!(VMContextBuilder::new().predecessor_account_id("mallory.testnet".parse().unwrap()).build());
-        c.set_model_key("x".to_string(), "00".repeat(32));
+        c.set_model_key("x".to_string(), PROVIDER.to_string(), SCHEME.to_string(), "00".repeat(32));
     }
 
     #[test]
     #[should_panic(expected = "public key must be 32 bytes, got 31")]
     fn rejects_short_public_key() {
         let mut c = setup();
-        c.set_model_key("x".to_string(), "00".repeat(31));
+        c.set_model_key("x".to_string(), PROVIDER.to_string(), SCHEME.to_string(), "00".repeat(31));
     }
 
 
@@ -732,9 +860,10 @@ mod tests {
             "base-1".to_string(),
             CHAIN_ID,
             BASE_ORACLE.to_string(),
+            FEE_CAP,
         );
         let model = "org/model:tag";
-        c.set_model_key(model.to_string(), format!("0X{}", hex::encode(test_key().verifying_key().as_bytes()).to_uppercase()));
+        c.set_model_key(model.to_string(), PROVIDER.to_string(), SCHEME.to_string(), format!("0X{}", hex::encode(test_key().verifying_key().as_bytes()).to_uppercase()));
         let resp = response_with("no");
         let sig = sign_for(&c, 1, QUESTION, model, &resp);
         let r = c.verify_answer(1, QUESTION.to_string(), model.to_string(), resp.clone(), format!("  {sig}\n"));
@@ -751,13 +880,13 @@ mod tests {
         let other_model = "other/model";
         let other_secret = [9u8; 32];
         let other_key = SigningKey::from_bytes(&other_secret);
-        c.set_model_key(other_model.to_string(), hex::encode(other_key.verifying_key().as_bytes()));
+        c.set_model_key(other_model.to_string(), PROVIDER.to_string(), SCHEME.to_string(), hex::encode(other_key.verifying_key().as_bytes()));
         let resp = response_with("YES");
         let text = c.signed_text(1, QUESTION.to_string(), MODEL.to_string(), resp.clone());
         let sig = hex::encode(other_key.sign(text.as_bytes()).to_bytes());
         let r = c.verify_answer(1, QUESTION.to_string(), MODEL.to_string(), resp.clone(), sig);
         assert_eq!(r.reason, "invalid signature");
-        let two_part_text = text.splitn(2, ':').nth(1).unwrap().to_string();
+        let two_part_text = text.split_once(':').unwrap().1.to_string();
         let sig = hex::encode(test_key().sign(two_part_text.as_bytes()).to_bytes());
         let r = c.verify_answer(1, QUESTION.to_string(), MODEL.to_string(), resp, sig);
         assert_eq!(r.reason, "invalid signature");
@@ -853,8 +982,8 @@ mod tests {
     fn reset_fulfilled_removes_only_that_id_and_reports_presence() {
         let mut c = setup();
         callback_ctx();
-        c.on_signed(Ok(json!({})), 11, "02".to_string(), "ab".to_string());
-        c.on_signed(Ok(json!({})), 12, "02".to_string(), "ab".to_string());
+        c.on_signed(Ok(json!({})), 11, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
+        c.on_signed(Ok(json!({})), 12, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
         assert!(c.is_fulfilled(11));
         assert!(c.is_fulfilled(12));
         owner_ctx();
@@ -870,7 +999,7 @@ mod tests {
     fn reset_fulfilled_rejects_non_owner() {
         let mut c = setup();
         callback_ctx();
-        c.on_signed(Ok(json!({})), 13, "02".to_string(), "ab".to_string());
+        c.on_signed(Ok(json!({})), 13, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
         mallory_ctx();
         c.reset_fulfilled(13);
     }
@@ -879,13 +1008,13 @@ mod tests {
     fn reset_fulfilled_allows_fulfill_on_base_again() {
         let mut c = setup3();
         callback_ctx();
-        c.on_signed(Ok(json!({})), 9, "02".to_string(), "ab".to_string());
+        c.on_signed(Ok(json!({})), 9, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
         assert!(c.is_fulfilled(9));
         let a = answers3(&c, 9, ["YES", "YES", "NO"]);
         assert!(c.reset_fulfilled(9));
         let _p = c.fulfill_on_base(9, QUESTION.to_string(), a, 1, U128(1), U128(1));
         assert!(!c.is_fulfilled(9));
-        let out = c.on_signed(Ok(json!({"big_r":"x"})), 9, "02".to_string(), "ab".to_string());
+        let out = c.on_signed(Ok(json!({"big_r":"x"})), 9, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
         assert_eq!(out["ok"], true);
         assert!(c.is_fulfilled(9));
     }
@@ -894,7 +1023,7 @@ mod tests {
     fn config_has_models_count_and_no_fulfilled_list() {
         let mut c = setup();
         callback_ctx();
-        c.on_signed(Ok(json!({})), 21, "02".to_string(), "ab".to_string());
+        c.on_signed(Ok(json!({})), 21, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
         owner_ctx();
         let cfg = c.config();
         let keys: Vec<&str> = cfg.as_object().unwrap().keys().map(|k| k.as_str()).collect();
@@ -908,7 +1037,7 @@ mod tests {
         assert_eq!(cfg["base_chain_id"], CHAIN_ID);
         assert_eq!(cfg["base_oracle_address"], BASE_ORACLE);
         assert_eq!(cfg["models"], 1);
-        c.set_model_key("other/model".to_string(), "00".repeat(32));
+        c.set_model_key("other/model".to_string(), PROVIDER.to_string(), SCHEME.to_string(), "00".repeat(32));
         assert_eq!(c.config()["models"], 2);
         c.remove_model_key(MODEL.to_string());
         c.remove_model_key("other/model".to_string());
@@ -917,13 +1046,18 @@ mod tests {
     }
 
     #[test]
-    fn contract_state_borsh_layout_is_unchanged() {
+    fn contract_state_borsh_layout_v2() {
         let mut c = setup();
         callback_ctx();
-        c.on_signed(Ok(json!({})), 1, "02".to_string(), "ab".to_string());
-        c.on_signed(Ok(json!({})), 2, "02".to_string(), "ab".to_string());
+        c.on_signed(Ok(json!({})), 1, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
+        c.on_signed(Ok(json!({})), 2, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
+        owner_ctx();
+        c.add_relayer("relayer.testnet".parse().unwrap());
+        c.pending.insert(3);
         c.model_keys.flush();
         c.fulfilled.flush();
+        c.relayers.flush();
+        c.pending.flush();
         let bytes = near_sdk::borsh::to_vec(&c).unwrap();
         let mut expected = Vec::new();
         let push_bytes = |out: &mut Vec<u8>, b: &[u8]| {
@@ -941,10 +1075,19 @@ mod tests {
         expected.extend_from_slice(&2u32.to_le_bytes());
         push_bytes(&mut expected, b"fv");
         push_bytes(&mut expected, b"fm");
+        expected.extend_from_slice(&1u32.to_le_bytes());
+        push_bytes(&mut expected, b"rv");
+        push_bytes(&mut expected, b"rm");
+        expected.extend_from_slice(&1u32.to_le_bytes());
+        push_bytes(&mut expected, b"pv");
+        push_bytes(&mut expected, b"pm");
+        expected.extend_from_slice(&FEE_CAP.0.to_le_bytes());
         assert_eq!(bytes, expected);
         let restored: AiOracle = near_sdk::borsh::from_slice(&bytes).unwrap();
         assert!(restored.is_fulfilled(1));
         assert!(restored.is_fulfilled(2));
+        assert!(restored.is_pending(3));
+        assert_eq!(restored.relayers(), vec!["relayer.testnet".parse::<AccountId>().unwrap()]);
         assert_eq!(restored.config(), c.config());
     }
 
@@ -962,9 +1105,10 @@ mod tests {
             "base-1".to_string(),
             CHAIN_ID,
             BASE_ORACLE.to_string(),
+            FEE_CAP,
         );
         for (i, m) in MODELS3.iter().enumerate() {
-            c.set_model_key(m.to_string(), hex::encode(key_n(i).verifying_key().as_bytes()));
+            c.set_model_key(m.to_string(), PROVIDER.to_string(), SCHEME.to_string(), hex::encode(key_n(i).verifying_key().as_bytes()));
         }
         c
     }
@@ -1108,7 +1252,7 @@ mod tests {
     fn consensus_majority_scales_with_registered_models() {
         let mut c = setup3();
         let extra = SigningKey::from_bytes(&[77u8; 32]);
-        c.set_model_key("extra/model".to_string(), hex::encode(extra.verifying_key().as_bytes()));
+        c.set_model_key("extra/model".to_string(), PROVIDER.to_string(), SCHEME.to_string(), hex::encode(extra.verifying_key().as_bytes()));
         let mut a = answers3(&c, 1, ["YES", "YES", "NO"]);
         let body = response_with("NO");
         let text = c.signed_text(1, QUESTION.to_string(), "extra/model".to_string(), body.clone());
@@ -1125,7 +1269,7 @@ mod tests {
         fulfill_ctx();
         let _p = c.fulfill_on_base(5, QUESTION.to_string(), answers3(&c, 5, ["YES", "NO", "YES"]), 0, U128(1), U128(1));
         assert!(!c.is_fulfilled(5));
-        let out = c.on_signed(Ok(json!({"big_r":"x"})), 5, "02".to_string(), "ab".to_string());
+        let out = c.on_signed(Ok(json!({"big_r":"x"})), 5, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
         assert_eq!(out["ok"], true);
         assert!(c.is_fulfilled(5));
     }
@@ -1166,9 +1310,395 @@ mod tests {
     fn fulfill_on_base_consensus_rejects_duplicate() {
         let mut c = setup3();
         fulfill_ctx();
-        c.on_signed(Ok(json!({})), 9, "02".to_string(), "ab".to_string());
+        c.on_signed(Ok(json!({})), 9, "02".to_string(), "ab".to_string(), "YES".to_string(), vec![]);
         let a = answers3(&c, 9, ["YES", "YES", "YES"]);
         let _ = c.fulfill_on_base(9, QUESTION.to_string(), a, 0, U128(1), U128(1));
     }
 
+    const PROVIDER: &str = "near-ai";
+    const SCHEME: &str = "nearai-v1";
+    const RELAYER: &str = "relayer.testnet";
+    const ORACLE_ACCOUNT: &str = "oracle.testnet";
+
+    fn ctx_as(account: &str, deposit: u128) {
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(account.parse().unwrap())
+            .current_account_id(ORACLE_ACCOUNT.parse().unwrap())
+            .attached_deposit(NearToken::from_yoctonear(deposit))
+            .build());
+    }
+
+    fn callback_as_contract() {
+        ctx_as(ORACLE_ACCOUNT, 0);
+    }
+
+    fn relayer_id() -> AccountId {
+        RELAYER.parse().unwrap()
+    }
+
+    fn setup3_with_relayer() -> AiOracle {
+        let mut c = setup3();
+        owner_ctx();
+        assert!(c.add_relayer(relayer_id()));
+        c
+    }
+
+    fn answer_q(c: &AiOracle, request_id: u64, question: &str, model_index: usize, content: &str) -> ModelAnswer {
+        let model = MODELS3[model_index];
+        let response_body = response_with(content);
+        let text = c.signed_text(request_id, question.to_string(), model.to_string(), response_body.clone());
+        ModelAnswer { model: model.to_string(), response_body, signature_hex: hex::encode(key_n(model_index).sign(text.as_bytes()).to_bytes()) }
+    }
+
+    fn votes3(contents: [&str; 3]) -> Vec<Vote> {
+        (0..3).map(|i| Vote { model: MODELS3[i].to_string(), answer: contents[i].to_string() }).collect()
+    }
+
+    fn event_logs() -> Vec<Value> {
+        near_sdk::test_utils::get_logs()
+            .iter()
+            .filter_map(|l| l.strip_prefix("EVENT_JSON:").map(|s| serde_json::from_str(s).unwrap()))
+            .collect()
+    }
+
+    #[test]
+    fn owner_manages_relayer_set() {
+        let mut c = setup3();
+        assert!(c.relayers().is_empty());
+        assert!(c.add_relayer(relayer_id()));
+        assert!(!c.add_relayer(relayer_id()));
+        assert_eq!(c.relayers(), vec![relayer_id()]);
+        assert!(c.remove_relayer(relayer_id()));
+        assert!(!c.remove_relayer(relayer_id()));
+        assert!(c.relayers().is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "only owner")]
+    fn relayer_cannot_add_relayers() {
+        let mut c = setup3_with_relayer();
+        ctx_as(RELAYER, 0);
+        c.add_relayer("other.testnet".parse().unwrap());
+    }
+
+    #[test]
+    #[should_panic(expected = "only owner")]
+    fn stranger_cannot_remove_relayer() {
+        let mut c = setup3_with_relayer();
+        ctx_as("mallory.testnet", 0);
+        c.remove_relayer(relayer_id());
+    }
+
+    #[test]
+    #[should_panic(expected = "only owner")]
+    fn relayer_cannot_change_models() {
+        let mut c = setup3_with_relayer();
+        ctx_as(RELAYER, 0);
+        c.set_model_key("evil/model".to_string(), PROVIDER.to_string(), SCHEME.to_string(), "00".repeat(32));
+    }
+
+    #[test]
+    #[should_panic(expected = "only owner")]
+    fn relayer_cannot_reset_fulfilled() {
+        let mut c = setup3_with_relayer();
+        ctx_as(RELAYER, 0);
+        c.reset_fulfilled(1);
+    }
+
+    #[test]
+    fn relayer_can_fulfill_on_base_with_zero_deposit() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 30, ["YES", "YES", "NO"]);
+        ctx_as(RELAYER, 0);
+        let _p = c.fulfill_on_base(30, QUESTION.to_string(), a, 0, U128(1), U128(1));
+        assert!(c.is_pending(30));
+        assert!(!c.is_fulfilled(30));
+    }
+
+    #[test]
+    #[should_panic(expected = "only owner or relayer")]
+    fn stranger_cannot_fulfill_on_base_when_relayers_exist() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 31, ["YES", "YES", "YES"]);
+        ctx_as("mallory.testnet", 0);
+        let _ = c.fulfill_on_base(31, QUESTION.to_string(), a, 0, U128(1), U128(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "only owner or relayer")]
+    fn removed_relayer_cannot_fulfill_on_base() {
+        let mut c = setup3_with_relayer();
+        assert!(c.remove_relayer(relayer_id()));
+        let a = answers3(&c, 32, ["YES", "YES", "YES"]);
+        ctx_as(RELAYER, 0);
+        let _ = c.fulfill_on_base(32, QUESTION.to_string(), a, 0, U128(1), U128(1));
+    }
+
+    #[test]
+    fn fulfill_on_base_pays_one_yocto_from_contract_and_forwards_votes() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 60, ["NO", "NO", "YES"]);
+        ctx_as(RELAYER, 0);
+        drop(c.fulfill_on_base(60, QUESTION.to_string(), a, 3, U128(10), U128(2)));
+        let receipts = near_sdk::test_utils::get_created_receipts();
+        let sign = receipts.iter().find(|r| r.receiver_id.as_str() == "v1.signer-prod.testnet").expect("sign receipt");
+        let callback = receipts.iter().find(|r| r.receiver_id.as_str() == ORACLE_ACCOUNT).expect("callback receipt");
+        match &sign.actions[..] {
+            [near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, attached_deposit, prepaid_gas, .. }] => {
+                assert_eq!(method_name.as_slice(), b"sign");
+                assert_eq!(*attached_deposit, NearToken::from_yoctonear(1));
+                assert_eq!(*prepaid_gas, SIGN_GAS);
+                let v: Value = serde_json::from_slice(args).unwrap();
+                assert_eq!(v["request"]["path"], "base-1");
+                assert_eq!(v["request"]["domain_id"], 0);
+            }
+            other => panic!("unexpected sign actions {other:?}"),
+        }
+        match &callback.actions[..] {
+            [near_sdk::mock::MockAction::FunctionCallWeight { method_name, args, attached_deposit, .. }] => {
+                assert_eq!(method_name.as_slice(), b"on_signed");
+                assert_eq!(*attached_deposit, NearToken::from_yoctonear(0));
+                let v: Value = serde_json::from_slice(args).unwrap();
+                assert_eq!(v["request_id"], 60);
+                assert_eq!(v["answer"], "NO");
+                assert_eq!(v["votes"], serde_json::to_value(votes3(["NO", "NO", "YES"])).unwrap());
+            }
+            other => panic!("unexpected callback actions {other:?}"),
+        }
+    }
+
+    #[test]
+    fn on_signed_success_logs_fulfilled_event_with_votes() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 50, ["YES", "NO", "YES"]);
+        ctx_as(RELAYER, 0);
+        let _p = c.fulfill_on_base(50, QUESTION.to_string(), a, 0, U128(1), U128(1));
+        callback_as_contract();
+        let out = c.on_signed(Ok(json!({"big_r":"x"})), 50, "02".to_string(), "ab".to_string(), "YES".to_string(), votes3(["YES", "NO", "YES"]));
+        assert_eq!(out["ok"], true);
+        assert_eq!(
+            event_logs(),
+            vec![json!({
+                "standard": "psephex",
+                "version": "1.0.0",
+                "event": "fulfilled",
+                "data": [{
+                    "request_id": 50,
+                    "answer": "YES",
+                    "votes": [
+                        {"model": MODELS3[0], "answer": "YES"},
+                        {"model": MODELS3[1], "answer": "NO"},
+                        {"model": MODELS3[2], "answer": "YES"}
+                    ]
+                }]
+            })]
+        );
+        assert!(c.is_fulfilled(50));
+        assert!(!c.is_pending(50));
+    }
+
+    #[test]
+    #[should_panic(expected = "request signing in progress")]
+    fn second_fulfill_while_signing_is_rejected() {
+        let mut c = setup3_with_relayer();
+        let first = answers3(&c, 70, ["YES", "YES", "YES"]);
+        let second = answers3(&c, 70, ["NO", "NO", "NO"]);
+        ctx_as(RELAYER, 0);
+        let _p = c.fulfill_on_base(70, QUESTION.to_string(), first, 0, U128(1), U128(1));
+        let _q = c.fulfill_on_base(70, QUESTION.to_string(), second, 1, U128(1), U128(1));
+    }
+
+    #[test]
+    fn failed_sign_clears_pending_and_allows_retry() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 71, ["YES", "YES", "NO"]);
+        ctx_as(RELAYER, 0);
+        let _p = c.fulfill_on_base(71, QUESTION.to_string(), a.clone(), 0, U128(1), U128(1));
+        callback_as_contract();
+        let out = c.on_signed(Err(PromiseError::Failed), 71, "02".to_string(), "ab".to_string(), "YES".to_string(), votes3(["YES", "YES", "NO"]));
+        assert_eq!(out["ok"], false);
+        assert!(event_logs().iter().all(|e| e["event"] != "fulfilled"));
+        assert!(!c.is_pending(71));
+        assert!(!c.is_fulfilled(71));
+        ctx_as(RELAYER, 0);
+        let _r = c.fulfill_on_base(71, QUESTION.to_string(), a, 1, U128(1), U128(1));
+        assert!(c.is_pending(71));
+    }
+
+    #[test]
+    fn reset_fulfilled_clears_stuck_pending() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 72, ["YES", "YES", "YES"]);
+        ctx_as(RELAYER, 0);
+        let _p = c.fulfill_on_base(72, QUESTION.to_string(), a, 0, U128(1), U128(1));
+        assert!(c.is_pending(72));
+        owner_ctx();
+        assert!(c.reset_fulfilled(72));
+        assert!(!c.is_pending(72));
+        assert!(!c.reset_fulfilled(72));
+    }
+
+    #[test]
+    fn question_at_limit_is_accepted() {
+        let c = setup3();
+        let q = "q".repeat(MAX_QUESTION_BYTES);
+        let a: Vec<ModelAnswer> = (0..3).map(|i| answer_q(&c, 40, &q, i, "YES")).collect();
+        let r = c.verify_consensus(40, q, a);
+        assert!(r.ok, "{}", r.reason);
+        assert_eq!(r.answer, "YES");
+    }
+
+    #[test]
+    fn question_over_limit_fails_consensus_view() {
+        let c = setup3();
+        let r = c.verify_consensus(41, "q".repeat(MAX_QUESTION_BYTES + 1), vec![]);
+        assert!(!r.ok);
+        assert_eq!(r.reason, format!("question too long: {} bytes, max {}", MAX_QUESTION_BYTES + 1, MAX_QUESTION_BYTES));
+    }
+
+    #[test]
+    fn question_limit_counts_bytes_not_chars() {
+        let c = setup3();
+        let q = "ї".repeat(MAX_QUESTION_BYTES / 2 + 1);
+        assert!(q.chars().count() < MAX_QUESTION_BYTES);
+        let r = c.verify_consensus(42, q, vec![]);
+        assert!(!r.ok);
+        assert!(r.reason.starts_with("question too long"), "{}", r.reason);
+    }
+
+    #[test]
+    fn verify_answer_rejects_long_question_without_panic() {
+        let c = setup();
+        let r = c.verify_answer(1, "q".repeat(MAX_QUESTION_BYTES + 1), MODEL.to_string(), response_with("YES"), "00".repeat(64));
+        assert!(!r.ok);
+        assert!(r.reason.starts_with("question too long"));
+        assert_eq!(r.signed_text, "");
+    }
+
+    #[test]
+    #[should_panic(expected = "question too long")]
+    fn build_request_rejects_long_question() {
+        let c = setup();
+        c.build_request(1, "q".repeat(MAX_QUESTION_BYTES + 1), MODEL.to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "question too long")]
+    fn fulfill_on_base_rejects_long_question() {
+        let mut c = setup3_with_relayer();
+        ctx_as(RELAYER, 0);
+        let _ = c.fulfill_on_base(43, "q".repeat(MAX_QUESTION_BYTES + 1), vec![], 0, U128(1), U128(1));
+    }
+
+    #[test]
+    fn set_model_key_stores_provider_and_scheme() {
+        let mut c = setup();
+        let key = hex::encode(key_n(5).verifying_key().as_bytes());
+        c.set_model_key("phala/model".to_string(), "phala".to_string(), SCHEME.to_string(), key.clone());
+        let models = c.models();
+        let phala = models.iter().find(|m| m.model == "phala/model").unwrap();
+        assert_eq!(phala.provider, "phala");
+        assert_eq!(phala.scheme, SCHEME);
+        assert_eq!(phala.public_key, key);
+        let base = models.iter().find(|m| m.model == MODEL).unwrap();
+        assert_eq!(base.provider, PROVIDER);
+        let v = serde_json::to_value(&models).unwrap();
+        let mut keys: Vec<&str> = v[0].as_object().unwrap().keys().map(|k| k.as_str()).collect();
+        keys.sort();
+        assert_eq!(keys, vec!["model", "provider", "public_key", "scheme"]);
+    }
+
+    #[test]
+    #[should_panic(expected = "unsupported signature scheme: phala-v1")]
+    fn set_model_key_rejects_unknown_scheme() {
+        let mut c = setup();
+        c.set_model_key("x".to_string(), "phala".to_string(), "phala-v1".to_string(), "00".repeat(32));
+    }
+
+    #[test]
+    #[should_panic(expected = "provider must not be empty")]
+    fn set_model_key_rejects_empty_provider() {
+        let mut c = setup();
+        c.set_model_key("x".to_string(), "  ".to_string(), SCHEME.to_string(), "00".repeat(32));
+    }
+
+    #[test]
+    #[should_panic(expected = "public key already registered for model Qwen/Qwen3.8-27B")]
+    fn set_model_key_rejects_key_reused_by_other_model() {
+        let mut c = setup3();
+        c.set_model_key("copy/model".to_string(), PROVIDER.to_string(), SCHEME.to_string(), hex::encode(key_n(0).verifying_key().as_bytes()));
+    }
+
+    #[test]
+    fn set_model_key_allows_rotating_same_model() {
+        let mut c = setup3();
+        c.set_model_key(MODELS3[0].to_string(), PROVIDER.to_string(), SCHEME.to_string(), hex::encode(key_n(0).verifying_key().as_bytes()));
+        let fresh = SigningKey::from_bytes(&[99u8; 32]);
+        c.set_model_key(MODELS3[0].to_string(), PROVIDER.to_string(), SCHEME.to_string(), hex::encode(fresh.verifying_key().as_bytes()));
+        assert_eq!(c.models().iter().find(|m| m.model == MODELS3[0]).unwrap().public_key, hex::encode(fresh.verifying_key().as_bytes()));
+    }
+
+    #[test]
+    fn owner_sets_fee_cap() {
+        let mut c = setup3();
+        assert_eq!(c.max_fee_per_gas_cap(), FEE_CAP);
+        c.set_max_fee_per_gas_cap(U128(5));
+        assert_eq!(c.max_fee_per_gas_cap(), U128(5));
+    }
+
+    #[test]
+    #[should_panic(expected = "only owner")]
+    fn relayer_cannot_set_fee_cap() {
+        let mut c = setup3_with_relayer();
+        ctx_as(RELAYER, 0);
+        c.set_max_fee_per_gas_cap(U128(u128::MAX));
+    }
+
+    #[test]
+    #[should_panic(expected = "fee cap must be positive")]
+    fn fee_cap_rejects_zero() {
+        let mut c = setup3();
+        c.set_max_fee_per_gas_cap(U128(0));
+    }
+
+    #[test]
+    fn fulfill_on_base_accepts_fee_at_cap() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 80, ["YES", "YES", "YES"]);
+        ctx_as(RELAYER, 0);
+        let _p = c.fulfill_on_base(80, QUESTION.to_string(), a, 0, FEE_CAP, FEE_CAP);
+        assert!(c.is_pending(80));
+    }
+
+    #[test]
+    #[should_panic(expected = "max_fee_per_gas above cap")]
+    fn fulfill_on_base_rejects_fee_above_cap() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 81, ["YES", "YES", "YES"]);
+        ctx_as(RELAYER, 0);
+        let _ = c.fulfill_on_base(81, QUESTION.to_string(), a, 0, U128(FEE_CAP.0 + 1), U128(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "max_priority_fee_per_gas above max_fee_per_gas")]
+    fn fulfill_on_base_rejects_priority_above_max_fee() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 82, ["YES", "YES", "YES"]);
+        ctx_as(RELAYER, 0);
+        let _ = c.fulfill_on_base(82, QUESTION.to_string(), a, 0, U128(10), U128(11));
+    }
+
+    #[test]
+    fn failed_sign_logs_sign_failed_event() {
+        let mut c = setup3_with_relayer();
+        let a = answers3(&c, 83, ["YES", "YES", "NO"]);
+        ctx_as(RELAYER, 0);
+        let _p = c.fulfill_on_base(83, QUESTION.to_string(), a, 0, U128(1), U128(1));
+        callback_as_contract();
+        c.on_signed(Err(PromiseError::Failed), 83, "02".to_string(), "ab".to_string(), "YES".to_string(), votes3(["YES", "YES", "NO"]));
+        assert_eq!(
+            event_logs(),
+            vec![json!({"standard": "psephex", "version": "1.0.0", "event": "sign_failed", "data": [{"request_id": 83}]})]
+        );
+    }
 }
