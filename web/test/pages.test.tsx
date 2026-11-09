@@ -181,6 +181,11 @@ describe("App", () => {
     expect(dashboard.getByRole("link", { name: /oracle\.psephex\.testnet on Nearblocks/ })).toHaveAttribute("rel", "noopener noreferrer");
   });
 
+  it("shows the not-found page for an agent record with an invalid account id", async () => {
+    setup(APP, "/app/agent/Bad..Account!");
+    expect(await screen.findByRole("heading", { level: 1, name: "This page does not exist" })).toBeInTheDocument();
+  });
+
   it("opens the new dispute form in a dialog and closes it back to the list", async () => {
     setup(APP, "/app/new");
     const dialog = await screen.findByRole("dialog", { name: "Open a dispute" });

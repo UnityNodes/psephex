@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router";
 import { WagmiContext, WagmiProvider } from "wagmi";
 import { NotFound } from "../components/NotFound.js";
 import { NearWalletProvider } from "../near/NearWalletProvider.js";
+import { AgentPage } from "../pages/AgentPage.js";
 import { LegacyRequestRedirect } from "../pages/RequestPage.js";
 import { ModelsPage } from "../pages/ModelsPage.js";
 import { wagmiConfig } from "../wagmi.js";
@@ -30,6 +31,7 @@ export default function Dashboard() {
             <Route path="/r/:source/:id" element={<Overview overlay="detail" />} />
             <Route path="/case/:id" element={<Overview overlay="case" />} />
             <Route path="/r/:id" element={<LegacyRequestRedirect />} />
+            <Route path="/agent/:account" element={<AgentPage />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

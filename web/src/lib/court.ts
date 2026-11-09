@@ -412,3 +412,69 @@ export const CASE_EXAMPLES: readonly CaseExample[] = [
 export function caseIdFrom(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
 }
+
+export interface AgentReputation {
+  readonly account: string;
+  readonly cases: number;
+  readonly open: number;
+  readonly won: number;
+  readonly lost: number;
+  readonly refunded: number;
+  readonly appeals_filed: number;
+  readonly named_as_counterparty: number;
+  readonly did_not_respond: number;
+  readonly win_rate: number | null;
+}
+
+type RecordFields = Pick<CourtCase, "claimant" | "counterparty" | "stage" | "winner" | "response" | "appellant">;
+
+export function isPartyTo(c: Pick<CourtCase, "claimant" | "counterparty">, account: string): boolean {
+  return c.claimant === account || c.counterparty === account;
+}
+
+/**
+ * Agents read the same record through the MCP server's `reputationOf`, so this counts exactly
+ * the same way: only settled cases are won or lost, and silence is a counterparty without a
+ * response once the case has moved past awaiting_response.
+ */
+export function reputationOf(account: string, cases: readonly RecordFields[]): AgentReputation {
+  const mine = cases.filter((c) => isPartyTo(c, account));
+  const settled = mine.filter((c) => c.stage === "settled");
+  const won = settled.filter((c) => c.winner === account).length;
+  const asCounterparty = mine.filter((c) => c.counterparty === account);
+  return {
+    account,
+    cases: mine.length,
+    open: mine.filter((c) => !FINAL_STAGES.has(c.stage)).length,
+    won,
+    lost: settled.length - won,
+    refunded: mine.filter((c) => c.stage === "refunded").length,
+    appeals_filed: mine.filter((c) => c.appellant === account).length,
+    named_as_counterparty: asCounterparty.length,
+    did_not_respond: asCounterparty.filter((c) => c.response === null && c.stage !== "awaiting_response").length,
+    win_rate: settled.length === 0 ? null : Math.round((won / settled.length) * 100) / 100,
+  };
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+export function reputationLine(r: AgentReputation): string {
+  if (r.cases === 0) return "No cases yet";
+  const settled = r.won + r.lost;
+  const head = settled > 0 ? `Won ${r.won} of ${plural(settled, "settled case")}` : r.open > 0 ? `No settled cases yet; ${r.open} open` : `No settled cases; ${r.refunded} refunded`;
+  return r.did_not_respond > 0 ? `${head}; did not answer ${plural(r.did_not_respond, "case")}` : head;
+}
+
+export type AgentOutcome = "won" | "lost" | "refunded" | "open";
+
+export function outcomeFor(c: Pick<CourtCase, "stage" | "winner">, account: string): AgentOutcome {
+  if (c.stage === "refunded") return "refunded";
+  if (c.stage !== "settled") return "open";
+  return c.winner === account ? "won" : "lost";
+}
+
+export function agentCases<T extends CourtCaseView>(account: string, cases: readonly T[]): T[] {
+  return cases.filter((c) => isPartyTo(c, account)).sort((a, b) => b.case_id - a.case_id);
+}

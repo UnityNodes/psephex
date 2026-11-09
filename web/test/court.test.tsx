@@ -354,8 +354,11 @@ describe("case list and links", () => {
     const rpc = fakeNearRpc({ [`${NEAR_COURT_CONTRACT}.config`]: CONFIG, [`${NEAR_COURT_CONTRACT}.cases`]: page });
     renderCourt(<RecentCases />, { path: "/app", rpc });
     const list = await screen.findByRole("list", { name: "Court cases" });
-    await waitFor(() => expect(within(list).getAllByRole("link")).toHaveLength(3));
-    expect(within(list).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual(["/app/case/3", "/app/case/2", "/app/case/1"]);
+    const caseLinks = () => within(list).getAllByRole("link").filter((a) => a.getAttribute("href")?.startsWith("/app/case/"));
+    await waitFor(() => expect(caseLinks()).toHaveLength(3));
+    expect(caseLinks().map((a) => a.getAttribute("href"))).toEqual(["/app/case/3", "/app/case/2", "/app/case/1"]);
+    expect(within(list).getAllByRole("link", { name: "seller-agent.testnet" })[0]).toHaveAttribute("href", "/app/agent/seller-agent.testnet");
+    expect(list.querySelector("a a")).toBeNull();
     expect(rpc.view).toHaveBeenCalledWith(NEAR_COURT_CONTRACT, "cases", { from_id: 1, limit: 10 });
   });
 

@@ -10,6 +10,8 @@ const LIST_POLL_MS = 15_000;
 const PRICE_DEBOUNCE_MS = 350;
 const CLOCK_MS = 1_000;
 export const RECENT_CASES = 10;
+export const CASES_PAGE = 50;
+export const MAX_CASE_PAGES = 40;
 
 export interface CasePrices {
   readonly oracleReserve: bigint;
@@ -92,6 +94,25 @@ export function useRecentCases() {
     },
     refetchInterval: LIST_POLL_MS,
   });
+}
+
+/**
+ * Pages exactly like the MCP server's `allCases`: the court returns at most 50 cases a call, a
+ * shorter page is the last one, and 40 pages bound the walk so a huge court cannot hang the page.
+ */
+export async function readAllCases(rpc: NearRpc): Promise<CourtCaseView[]> {
+  const out: CourtCaseView[] = [];
+  for (let page = 0; page < MAX_CASE_PAGES; page++) {
+    const batch = await rpc.view<CourtCaseView[]>(NEAR_COURT_CONTRACT, "cases", { from_id: page * CASES_PAGE + 1, limit: CASES_PAGE });
+    out.push(...batch);
+    if (batch.length < CASES_PAGE) break;
+  }
+  return out;
+}
+
+export function useAllCases() {
+  const rpc = useNearRpc();
+  return useQuery({ queryKey: ["court", "all"], queryFn: () => readAllCases(rpc), refetchInterval: LIST_POLL_MS });
 }
 
 export function useCaseByRequest(requestId: number, enabled: boolean) {

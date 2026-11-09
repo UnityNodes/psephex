@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
+import { AgentLink } from "../components/AgentLink.js";
 import { CopyButton } from "../components/Commands.js";
 import { Steps } from "../components/Steps.js";
 import { Badge } from "../components/ui/badge.js";
@@ -18,7 +19,7 @@ function Statement({ who, label, text, empty }: { who: string; label: string; te
   return (
     <div className="flex min-w-0 flex-col gap-1 border-t border-line pt-4 first:border-t-0 first:pt-0">
       <p className="m-0 text-xs font-medium text-bronze-text">
-        {label} <span className="font-mono text-muted [overflow-wrap:anywhere]">{who}</span>
+        {label} <AgentLink account={who} className="text-muted" />
       </p>
       {text !== null ? <p className="m-0 [overflow-wrap:anywhere]">{displayText(text)}</p> : <p className="m-0 text-muted italic">{empty}</p>}
     </div>
@@ -82,7 +83,7 @@ function ArbiterPanel({ c, caseId }: { c: CourtCase; caseId: number }) {
         The arbiter
       </h2>
       <p className="m-0 text-muted [overflow-wrap:anywhere]">
-        {c.appellant} appealed. The arbiter of this appeal is <span className="font-mono text-ink">{arbiter ?? "unknown"}</span>, a person who rules from the NEAR CLI. The winner gets the stake and the bond.
+        {c.appellant && <AgentLink account={c.appellant} className="text-ink" />} appealed. The arbiter of this appeal is <span className="font-mono text-ink">{arbiter ?? "unknown"}</span>, a person who rules from the NEAR CLI. The winner gets the stake and the bond.
       </p>
       {commands.map(({ w, cmd }) => (cmd ? <CodeBlock key={w} title={`Rule for the ${w}`} code={cmd} /> : null))}
       {commands.every((x) => x.cmd === null) && <p className="m-0 text-sm text-no">The arbiter account from NEAR is not a valid account id, so no command is shown.</p>}
@@ -105,8 +106,20 @@ function OracleQuestion({ caseId, c }: { caseId: number; c: CourtCase }) {
 }
 
 function verdictLine(c: CourtCase): ReactNode {
-  if (c.stage === "settled" && c.winner) return `${c.winner} got the stake of ${formatNear(BigInt(c.amount))} NEAR.`;
-  if (c.stage === "refunded") return `The stake went back to ${c.claimant}.`;
+  if (c.stage === "settled" && c.winner) {
+    return (
+      <>
+        <AgentLink account={c.winner} /> got the stake of {formatNear(BigInt(c.amount))} NEAR.
+      </>
+    );
+  }
+  if (c.stage === "refunded") {
+    return (
+      <>
+        The stake went back to <AgentLink account={c.claimant} />.
+      </>
+    );
+  }
   if (c.verdict) return `Verdict: ${c.verdict}.`;
   return null;
 }
@@ -138,6 +151,9 @@ function CaseView({ caseId, c, config, onChanged }: { caseId: number; c: CourtCa
           <Badge variant="outline">{STAGE_LABEL[c.stage]}</Badge>
           <span>Stake {formatNear(BigInt(c.amount))} NEAR</span>
         </div>
+        <p className="m-0 text-sm text-muted">
+          <AgentLink account={c.claimant} className="text-ink" /> vs <AgentLink account={c.counterparty} className="text-ink" />
+        </p>
         <h1 className="m-0 max-w-[40ch] font-display text-2xl leading-tight font-bold break-words sm:text-3xl">{displayText(c.claim)}</h1>
         {summary && <p className="m-0 font-medium">{summary}</p>}
         <Countdowns items={deadlines(c, config)} nowNs={nowNs} />

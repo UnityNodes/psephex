@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "../components
 import { usePageTitle } from "../hooks.js";
 import { isSource, SOURCE_NAME } from "../sources.js";
 import { DisputeForm } from "../pages/DisputeForm.js";
+import { AgentLookup } from "../pages/AgentLookup.js";
 import { CasePage } from "../pages/CasePage.js";
 import { RecentCases } from "../pages/RecentCases.js";
 import { RecentDisputes } from "../pages/RecentDisputes.js";
@@ -93,6 +94,7 @@ export function Overview({ overlay = "none" }: { overlay?: Overlay }) {
         </Button>
       </header>
       <MetricsStrip />
+      <AgentLookup />
       <RecentCases />
       <RecentDisputes />
       {overlay === "new" && <NewDisputeDialog />}

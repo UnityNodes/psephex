@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router";
-import { shortAccount } from "../components/NearAccount.js";
+import { AgentLink } from "../components/AgentLink.js";
 import { Skeleton } from "../components/ui/skeleton.js";
 import { STAGE_LABEL, type CourtCaseView } from "../lib/court.js";
 import { formatNear } from "../lib/near-dispute.js";
@@ -8,27 +9,26 @@ import { useRecentCases } from "../near/court-hooks.js";
 
 const VERDICT_TEXT: Readonly<Record<string, string>> = { YES: "text-yes", NO: "text-no", UNKNOWN: "text-unknown" };
 
-function CaseRow({ c, selected }: { c: CourtCaseView; selected: boolean }) {
+/**
+ * A link inside a link is invalid HTML and browsers split it, so the row link covers the row
+ * through its ::after box and the party links sit above it.
+ */
+export function CaseRow({ c, selected = false, note, short = true }: { c: CourtCaseView; selected?: boolean; note?: ReactNode; short?: boolean }) {
   return (
-    <li>
-      <Link
-        to={`/app/case/${c.case_id}`}
-        aria-current={selected ? "page" : undefined}
-        className={`flex flex-col gap-1.5 border-b border-line px-4 py-4 transition-colors duration-150 hover:bg-raised/70 ${selected ? "bg-raised shadow-[inset_2px_0_0_var(--bronze)]" : ""}`}
-      >
-        <span className="flex min-w-0 items-baseline gap-2">
-          <span className="font-mono text-xs text-muted">#{c.case_id}</span>
-          <span className="line-clamp-2 min-w-0 text-sm text-ink">{displayText(c.claim)}</span>
-        </span>
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-          <span className="font-medium text-ink">{STAGE_LABEL[c.stage]}</span>
-          {c.verdict && <span className={`font-semibold ${VERDICT_TEXT[c.verdict] ?? ""}`}>{c.verdict}</span>}
-          <span className="tabular-nums">{formatNear(BigInt(c.amount))} NEAR</span>
-          <span className="min-w-0 [overflow-wrap:anywhere]">
-            {shortAccount(c.claimant)} vs {shortAccount(c.counterparty)}
-          </span>
-        </span>
+    <li className={`relative flex flex-col gap-1.5 border-b border-line px-4 py-4 transition-colors duration-150 hover:bg-raised/70 ${selected ? "bg-raised shadow-[inset_2px_0_0_var(--bronze)]" : ""}`}>
+      <Link to={`/app/case/${c.case_id}`} aria-current={selected ? "page" : undefined} className="flex min-w-0 items-baseline gap-2 after:absolute after:inset-0 after:content-['']">
+        <span className="font-mono text-xs text-muted">#{c.case_id}</span>
+        <span className="line-clamp-2 min-w-0 text-sm text-ink">{displayText(c.claim)}</span>
       </Link>
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+        {note}
+        <span className="font-medium text-ink">{STAGE_LABEL[c.stage]}</span>
+        {c.verdict && <span className={`font-semibold ${VERDICT_TEXT[c.verdict] ?? ""}`}>{c.verdict}</span>}
+        <span className="tabular-nums">{formatNear(BigInt(c.amount))} NEAR</span>
+        <span className="relative z-10 min-w-0 [overflow-wrap:anywhere]">
+          <AgentLink account={c.claimant} short={short} /> vs <AgentLink account={c.counterparty} short={short} />
+        </span>
+      </span>
     </li>
   );
 }
