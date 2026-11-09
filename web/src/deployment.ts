@@ -29,6 +29,18 @@ export function attestationUrl(raw: string): string | null {
   }
 }
 
+export function optionalHttpsUrl(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    return new URL(raw).protocol === "https:" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export const REPO_URL = optionalHttpsUrl(import.meta.env.VITE_REPO_URL);
+export const VIDEO_URL = optionalHttpsUrl(import.meta.env.VITE_VIDEO_URL);
+
 export const API_URL = httpUrl(import.meta.env.VITE_API_URL, "http://127.0.0.1:8790");
 export const BASE_RPC_URL = httpUrl(import.meta.env.VITE_BASE_RPC_URL, "https://sepolia.base.org");
 

@@ -49,6 +49,19 @@ export function useRequestPages(status: RequestStatus | undefined) {
   });
 }
 
+export function useStats() {
+  const api = useApi();
+  return useQuery({ queryKey: ["stats"], queryFn: () => api.stats(), refetchInterval: 30_000 });
+}
+
+export function useLatestVerdict() {
+  const api = useApi();
+  const latest = useQuery({ queryKey: ["latest-confirmed"], queryFn: () => api.requests({ limit: 1, status: "confirmed" }), refetchInterval: 30_000 });
+  const id = latest.data?.items[0]?.id;
+  const detail = useQuery({ queryKey: ["request", id], queryFn: () => api.request(id ?? 0), enabled: id !== undefined });
+  return { detail: detail.data ?? null, isError: latest.isError || detail.isError };
+}
+
 export function useModels() {
   const api = useApi();
   return useQuery({ queryKey: ["models"], queryFn: () => api.models(), staleTime: 60_000 });

@@ -22,16 +22,16 @@ export function BallotDisc({ vote, size = 64 }: { vote: Answer | null; size?: nu
   );
 }
 
-export function Ballots({ ballots, verdict }: { ballots: readonly Ballot[]; verdict: Answer | null }) {
+export function Ballots({ ballots, verdict, compact = false }: { ballots: readonly Ballot[]; verdict: Answer | null; compact?: boolean }) {
   const slots = ballots.length > 0 ? ballots : [null, null, null];
   const agree = ballots.filter((b) => b.vote === verdict).length;
   return (
     <figure className="m-0">
-      <ul className="m-0 flex list-none flex-wrap gap-6 p-0" aria-label="Model votes">
+      <ul className={`m-0 flex list-none flex-wrap p-0 ${compact ? "gap-2" : "gap-6"}`} aria-label="Model votes">
         {slots.map((b, i) => (
-          <li key={b?.model ?? i} className="flex w-28 flex-col items-center gap-2 text-center">
-            <BallotDisc vote={b?.vote ?? null} />
-            <span className="text-sm font-medium break-words">{b ? shortName(b.model) : "Waiting"}</span>
+          <li key={b?.model ?? i} className={`flex flex-col items-center gap-2 text-center ${compact ? "w-[5.25rem]" : "w-28"}`}>
+            <BallotDisc vote={b?.vote ?? null} size={compact ? 48 : 64} />
+            <span className={`font-medium break-words ${compact ? "text-xs" : "text-sm"}`}>{b ? shortName(b.model) : "Waiting"}</span>
             <span className="text-xs text-muted">{b?.vote ? `${MEANING[b.vote]}, signed` : b?.signed ? "signed" : "no answer yet"}</span>
           </li>
         ))}

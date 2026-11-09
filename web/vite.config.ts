@@ -43,6 +43,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins,
     build: { target: "es2022", sourcemap: false },
+    server: { fs: { allow: [".", "../contracts/base/src/examples"] } },
     test: {
       environment: "jsdom",
       include: ["test/**/*.test.{ts,tsx}"],

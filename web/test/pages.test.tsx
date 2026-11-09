@@ -163,16 +163,19 @@ const FAR_FUTURE = 10n ** 12n;
 const APP = <App />;
 
 describe("App", () => {
-  it("redirects the root to the dashboard", async () => {
-    setup(APP, "/");
-    expect(await screen.findByRole("heading", { level: 1, name: /Put a yes-or-no dispute/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /oracle\.psephex\.testnet on Nearblocks/ })).toHaveAttribute("rel", "noopener noreferrer");
+  it("opens the landing at the root and the dashboard under /app", async () => {
+    const landing = setup(APP, "/");
+    expect(await landing.findByRole("heading", { level: 1, name: /Three AI models answer/ })).toBeInTheDocument();
+    landing.unmount();
+    const dashboard = setup(APP, "/app");
+    expect(await dashboard.findByRole("heading", { level: 1, name: /Put a yes-or-no dispute/ })).toBeInTheDocument();
+    expect(dashboard.getByRole("link", { name: /oracle\.psephex\.testnet on Nearblocks/ })).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("routes to a dispute and to an unknown page", async () => {
     setup(APP, "/app/r/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE } });
     expect(await screen.findByRole("heading", { name: "The path of this dispute" })).toBeInTheDocument();
-    const other = setup(APP, "/nope");
+    const other = setup(APP, "/app/nope");
     expect(await other.findByText(/This page does not exist/)).toBeInTheDocument();
   });
 });

@@ -13,7 +13,7 @@ export function isSafeCommand(command: string): boolean {
   return command.length <= MAX_COMMAND_LENGTH && SAFE_COMMAND.test(command) && !/;|&|`|\$\(|\s{2,}/.test(command);
 }
 
-function CopyButton({ text }: { text: string }) {
+export function CopyButton({ text }: { text: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   return (
     <button

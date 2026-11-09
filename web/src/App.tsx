@@ -2,6 +2,7 @@ import { Navigate, NavLink, Route, Routes } from "react-router";
 import { Wallet } from "./components/Wallet.js";
 import { AIORACLE_ADDRESS, explorer, NEAR_ORACLE_CONTRACT } from "./deployment.js";
 import { DisputeForm } from "./pages/DisputeForm.js";
+import { Landing } from "./pages/Landing.js";
 import { ModelsPage } from "./pages/ModelsPage.js";
 import { RecentDisputes } from "./pages/RecentDisputes.js";
 import { RequestPage } from "./pages/RequestPage.js";
@@ -35,12 +36,12 @@ function NotFound() {
   );
 }
 
-export function App() {
+function Shell() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
       <header className="flex flex-wrap items-center justify-between gap-4 py-6">
         <div className="flex items-baseline gap-6">
-          <NavLink to="/app" className="font-display text-2xl font-bold tracking-tight">
+          <NavLink to="/" className="font-display text-2xl font-bold tracking-tight">
             Psephex
           </NavLink>
           <nav aria-label="Main" className="flex gap-4 text-sm">
@@ -56,10 +57,9 @@ export function App() {
       </header>
       <main className="flex-1 pt-6 pb-16">
         <Routes>
-          <Route path="/" element={<Navigate to="/app" replace />} />
-          <Route path="/app" element={<Dashboard />} />
-          <Route path="/app/r/:id" element={<RequestPage />} />
-          <Route path="/app/models" element={<ModelsPage />} />
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/r/:id" element={<RequestPage />} />
+          <Route path="/models" element={<ModelsPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
@@ -73,5 +73,15 @@ export function App() {
         </a>
       </footer>
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/app/*" element={<Shell />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
