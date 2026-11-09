@@ -7,6 +7,7 @@ import {Dispute} from "../src/Dispute.sol";
 
 contract DeployV2 is Script {
     uint256 internal constant BASE_SEPOLIA = 84532;
+    uint256 internal constant ARBITRUM_SEPOLIA = 421614;
     uint256 internal constant LOCAL_SIMULATION = 31337;
     uint256 internal constant MAX_TIMEOUT = 7 days;
 
@@ -21,7 +22,8 @@ contract DeployV2 is Script {
         uint256 minStake = vm.envUint("MIN_STAKE_WEI");
         uint256 timeoutRaw = vm.envUint("DISPUTE_TIMEOUT");
 
-        if (block.chainid != BASE_SEPOLIA && block.chainid != LOCAL_SIMULATION) revert WrongChain(block.chainid);
+        bool testnet = block.chainid == BASE_SEPOLIA || block.chainid == ARBITRUM_SEPOLIA;
+        if (!testnet && block.chainid != LOCAL_SIMULATION) revert WrongChain(block.chainid);
         if (timeoutRaw == 0 || timeoutRaw > MAX_TIMEOUT) revert TimeoutOutOfRange(timeoutRaw);
         uint64 timeout = uint64(timeoutRaw);
 
