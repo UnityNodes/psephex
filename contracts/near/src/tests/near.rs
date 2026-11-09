@@ -50,19 +50,7 @@ fn setup_near() -> AiOracle {
 }
 
 fn required(c: &AiOracle, question: &str) -> u128 {
-    let bytes = near_sdk::borsh::to_vec(&NearRequest {
-        asker: ALICE.parse().unwrap(),
-        question: question.to_string(),
-        paid: 0,
-        created_ns: 0,
-        callback: false,
-        answer: None,
-        votes: vec![],
-        answered_ns: None,
-    })
-    .unwrap()
-    .len() as u128;
-    c.near_fee().0 + (1 + 8 + bytes + 40) * env::storage_byte_cost().as_yoctonear()
+    c.ask_charge(ALICE.parse().unwrap(), question.to_string())
 }
 
 fn ask_as(
@@ -122,17 +110,24 @@ fn ask_rejects_a_deposit_below_fee_plus_storage() {
 }
 
 #[test]
-fn storage_charge_matches_real_storage_use() {
+fn storage_charge_covers_the_answered_record_exactly() {
     let mut c = setup_near();
-    let need = required(&c, NEAR_Q);
-    ctx_as(ALICE, need);
+    let need = c.ask_charge(RELAYER.parse().unwrap(), NEAR_Q.to_string());
+    ctx_as(RELAYER, need);
     let before = env::storage_usage();
     c.ask(NEAR_Q.to_string(), None);
     c.near_requests.flush();
-    let used = env::storage_usage() - before;
+    let asked = env::storage_usage() - before;
+    let answers = near_answers(&c, 1, NEAR_Q, ["UNKNOWN", "UNKNOWN", "UNKNOWN"]);
+    let _ = c.fulfill_on_near(1, answers);
+    c.near_requests.flush();
+    let answered = env::storage_usage() - before;
+    assert!(answered > asked);
+    let longest = MODELS3.iter().map(|m| m.len()).max().unwrap() as u64;
+    let slack: u64 = MODELS3.iter().map(|m| longest - m.len() as u64).sum();
     assert_eq!(
         need - c.near_fee().0,
-        u128::from(used) * env::storage_byte_cost().as_yoctonear()
+        u128::from(answered + slack) * env::storage_byte_cost().as_yoctonear()
     );
 }
 

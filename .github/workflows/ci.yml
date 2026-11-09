@@ -11,9 +11,12 @@ permissions:
 jobs:
   near:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        crate: [contracts/near, contracts/near-dispute]
     defaults:
       run:
-        working-directory: contracts/near
+        working-directory: ${{ matrix.crate }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -22,7 +25,7 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: contracts/near
+          workspaces: ${{ matrix.crate }}
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked

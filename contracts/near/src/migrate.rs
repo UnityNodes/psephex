@@ -36,8 +36,10 @@ impl AiOracle {
         for id in old.fulfilled.iter() {
             fulfilled.insert((old.base_chain_id, *id));
         }
+        require!(old.base_chain_id > 0, "v2 chain id must be positive");
         old.fulfilled.clear();
         old.fulfilled.flush();
+        old.pending.clear();
         old.pending.flush();
         let mut contract = Self {
             owner: old.owner,

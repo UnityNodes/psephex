@@ -54,8 +54,6 @@ fn storage_cost(bytes: u64) -> u128 {
     env::storage_byte_cost().as_yoctonear() * u128::from(bytes)
 }
 
-/// The asker pays for the record their request adds to contract storage, otherwise a stream of
-/// long questions would drain the balance the contract needs for MPC signing on other chains.
 fn request_storage_bytes(request: &NearRequest) -> u64 {
     let value = near_sdk::borsh::to_vec(request).unwrap_or_else(|_| env::abort());
     STORAGE_PREFIX_BYTES + KEY_BYTES + value.len() as u64 + RECORD_OVERHEAD_BYTES
@@ -80,6 +78,35 @@ fn view(request_id: u64, r: &NearRequest) -> NearRequestView {
     }
 }
 
+impl AiOracle {
+    /// The asker pays for the record in its final, answered shape, otherwise a stream of cheap
+    /// requests would make the contract pay for every stored verdict out of the balance it needs
+    /// for MPC signing on other chains.
+    pub(crate) fn ask_charge(&self, asker: AccountId, question: String) -> u128 {
+        let longest_model = self
+            .model_keys
+            .keys()
+            .max_by_key(|m| m.len())
+            .cloned()
+            .unwrap_or_default();
+        let vote = Vote {
+            model: longest_model,
+            answer: "UNKNOWN".to_string(),
+        };
+        let answered = NearRequest {
+            asker,
+            question,
+            paid: 0,
+            created_ns: 0,
+            callback: false,
+            answer: Some("UNKNOWN".to_string()),
+            votes: vec![vote; self.model_keys.len() as usize],
+            answered_ns: Some(0),
+        };
+        self.near_fee + storage_cost(request_storage_bytes(&answered))
+    }
+}
+
 #[near]
 impl AiOracle {
     pub fn set_near_fee(&mut self, fee: U128) {
@@ -97,17 +124,7 @@ impl AiOracle {
             .repeat(MAX_ACCOUNT_ID_LEN)
             .parse()
             .unwrap_or_else(|_| env::abort());
-        let sample = NearRequest {
-            asker: longest_asker,
-            question,
-            paid: 0,
-            created_ns: 0,
-            callback: false,
-            answer: None,
-            votes: vec![],
-            answered_ns: None,
-        };
-        U128(self.near_fee + storage_cost(request_storage_bytes(&sample)))
+        U128(self.ask_charge(longest_asker, question))
     }
 
     #[payable]
@@ -116,25 +133,24 @@ impl AiOracle {
         require!(!question.trim().is_empty(), "question must not be empty");
         let asker = env::predecessor_account_id();
         let deposit = env::attached_deposit().as_yoctonear();
-        let mut request = NearRequest {
+        let required = self.ask_charge(asker.clone(), question.clone());
+        if deposit < required {
+            env::panic_str(&format!(
+                "attach at least {required} yoctoNEAR: fee {} plus storage {}",
+                self.near_fee,
+                required - self.near_fee
+            ));
+        }
+        let request = NearRequest {
             asker: asker.clone(),
             question,
-            paid: 0,
+            paid: required,
             created_ns: env::block_timestamp(),
             callback: callback.unwrap_or(false),
             answer: None,
             votes: vec![],
             answered_ns: None,
         };
-        let storage = storage_cost(request_storage_bytes(&request));
-        let required = self.near_fee + storage;
-        if deposit < required {
-            env::panic_str(&format!(
-                "attach at least {required} yoctoNEAR: fee {} plus storage {storage}",
-                self.near_fee
-            ));
-        }
-        request.paid = required;
         let request_id = self.last_near_request_id + 1;
         self.last_near_request_id = request_id;
         let question_hash = format!(

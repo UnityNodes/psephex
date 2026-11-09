@@ -2282,3 +2282,15 @@ fn set_model_key_still_rejects_unknown_schemes() {
 }
 
 mod near;
+
+#[test]
+#[should_panic(expected = "chain has signatures in progress")]
+fn set_chain_refuses_while_signing() {
+    let mut c = setup();
+    c.pending.insert((CHAIN_ID, 3));
+    c.set_chain(
+        CHAIN_ID,
+        "Base Sepolia".to_string(),
+        BASE_ORACLE.to_string(),
+    );
+}

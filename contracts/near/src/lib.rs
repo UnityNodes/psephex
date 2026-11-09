@@ -367,6 +367,10 @@ impl AiOracle {
 
     pub fn set_chain(&mut self, chain_id: u64, name: String, oracle_address: String) {
         self.assert_owner();
+        require!(
+            !self.pending.iter().any(|(c, _)| *c == chain_id),
+            "chain has signatures in progress"
+        );
         self.put_chain(chain_id, name, oracle_address);
     }
 
