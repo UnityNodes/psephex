@@ -9,7 +9,12 @@ import { defineConfig } from "vitest/config";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 const DEFAULT_RPC = "https://sepolia.base.org";
 const DEFAULT_ARBITRUM_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
-const DEFAULT_NEAR_RPC = "https://rpc.testnet.near.org";
+/**
+ * rpc.testnet.near.org rate-limits hard and answers 429 without CORS headers, so the court page,
+ * which polls a case while it is open, stopped reading the contract after a few refreshes.
+ * FastNEAR serves the same JSON-RPC with CORS and room for a polling page.
+ */
+const DEFAULT_NEAR_RPC = "https://rpc.testnet.fastnear.com";
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 /**

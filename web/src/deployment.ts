@@ -47,7 +47,7 @@ export const VIDEO_URL = optionalHttpsUrl(import.meta.env.VITE_VIDEO_URL);
 export const API_URL = httpUrl(import.meta.env.VITE_API_URL, "http://127.0.0.1:8790");
 export const BASE_RPC_URL = httpUrl(import.meta.env.VITE_BASE_RPC_URL, "https://sepolia.base.org");
 export const ARBITRUM_RPC_URL = httpUrl(import.meta.env.VITE_ARBITRUM_RPC_URL, "https://sepolia-rollup.arbitrum.io/rpc");
-export const NEAR_RPC_URL = httpUrl(import.meta.env.VITE_NEAR_RPC_URL, "https://rpc.testnet.near.org");
+export const NEAR_RPC_URL = httpUrl(import.meta.env.VITE_NEAR_RPC_URL, "https://rpc.testnet.fastnear.com");
 
 export function isNearAccount(value: string): boolean {
   return NEAR_ACCOUNT.test(value);
