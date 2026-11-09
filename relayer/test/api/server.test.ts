@@ -102,6 +102,12 @@ describe("API server", () => {
     expect((await app.inject("/requests/99/verify")).statusCode).toBe(404);
   });
 
+  it("GET /requests/:id/verify checks the answers against the current model set", async () => {
+    chain.modelList = { ok: true, value: [MODELS[0]!, MODELS[1]!, { ...MODELS[2]!, model: "phala/new" }], at: T0, stale: false };
+    const res = await app.inject("/requests/1/verify");
+    expect(res.json().data).toMatchObject({ available: false, reason: expect.stringMatching(/earlier model set/) });
+  });
+
   it("GET /models serves the registered models and 503 when NEAR never answered", async () => {
     expect((await app.inject("/models")).json().data).toHaveLength(3);
     chain.modelList = { ok: false, error: "NEAR RPC unavailable" };

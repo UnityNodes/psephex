@@ -85,6 +85,16 @@ describe("views", () => {
     expect(rejected.reason).toMatch(/no signed model answers.*rejected: question is longer/);
   });
 
+  it("withholds the consensus re-check when NEAR now holds another model set", () => {
+    const plan = verifyPlan(bundle(store, 1), settings, ["alpha/A", "beta/B", "delta/D"]);
+    expect(plan.available).toBe(false);
+    expect(plan.reason).toBe("answered by an earlier model set (alpha/A, beta/B, gamma/C); NEAR now checks alpha/A, beta/B, delta/D");
+    expect(plan.steps.some((s) => s.command.includes("verify_consensus"))).toBe(false);
+    expect(plan.steps.some((s) => s.command.includes("cast keccak"))).toBe(true);
+    expect(verifyPlan(bundle(store, 1), settings, ["gamma/C", "alpha/A", "beta/B"]).available).toBe(true);
+    expect(verifyPlan(bundle(store, 1), settings, null).available).toBe(true);
+  });
+
   it("rejects tokens that a shell would interpret", () => {
     expect(shellToken("0xabc")).toBe("0xabc");
     for (const bad of ["a b", "a'b", "$(id)", "a;b", "a|b", "", "a\nb", "--rpc-url", "~root"]) expect(() => shellToken(bad)).toThrow(/unsafe/);

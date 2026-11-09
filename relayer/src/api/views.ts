@@ -167,10 +167,24 @@ export function requestDetail(input: RequestBundle & { readonly models: readonly
   };
 }
 
-function unverifiableReason(b: RequestBundle): string | null {
+/**
+ * verify_consensus checks answers against the models registered on NEAR now. After the owner
+ * changes the set, an older request can no longer pass that view even though its NEAR and Base
+ * transactions stay valid, so the plan says so instead of handing out a command that fails.
+ */
+function setMismatch(b: RequestBundle, currentModels: readonly string[] | null): string | null {
+  if (currentModels === null) return null;
+  const answered = [...new Set(b.answers.map((a) => a.model))].sort();
+  const current = [...currentModels].sort();
+  const same = answered.length === current.length && answered.every((m, i) => m === current[i]);
+  return same ? null : `answered by an earlier model set (${answered.join(", ")}); NEAR now checks ${currentModels.join(", ")}`;
+}
+
+function unverifiableReason(b: RequestBundle, currentModels: readonly string[] | null): string | null {
   if (b.answers.length === 0) return `no signed model answers stored; request ${b.request.status}${b.request.reason ? `: ${b.request.reason}` : ""}`;
   const unsigned = b.answers.filter((a) => !a.responseBody || !a.signatureHex).map((a) => a.model);
-  return unsigned.length > 0 ? `model answers without a signature: ${unsigned.join(", ")}` : null;
+  if (unsigned.length > 0) return `model answers without a signature: ${unsigned.join(", ")}`;
+  return setMismatch(b, currentModels);
 }
 
 function chainSteps(b: RequestBundle, s: ViewSettings, file: string): VerifyStep[] {
@@ -203,10 +217,10 @@ function chainSteps(b: RequestBundle, s: ViewSettings, file: string): VerifyStep
   return steps;
 }
 
-export function verifyPlan(b: RequestBundle, s: ViewSettings): VerifyPlan {
+export function verifyPlan(b: RequestBundle, s: ViewSettings, currentModels: readonly string[] | null = null): VerifyPlan {
   const id = shellToken(String(b.request.id));
   const file = `psephex-${id}.json`;
-  const reason = unverifiableReason(b);
+  const reason = unverifiableReason(b, currentModels);
   const contract = shellToken(s.nearOracleContract);
   const network = shellToken(s.nearNetwork);
   const download: VerifyStep = {

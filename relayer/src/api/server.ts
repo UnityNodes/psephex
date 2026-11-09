@@ -188,9 +188,11 @@ function registerRoutes(app: FastifyInstance, deps: ApiDeps): void {
     return { data: requestDetail({ ...b, models: models.ok ? models.value : null }) };
   });
 
-  app.get<{ Params: { id: string } }>("/requests/:id/verify", { schema: { params: idParams } }, async (req) => ({
-    data: verifyPlan(bundle(store, Number(req.params.id)), config),
-  }));
+  app.get<{ Params: { id: string } }>("/requests/:id/verify", { schema: { params: idParams } }, async (req) => {
+    const b = bundle(store, Number(req.params.id));
+    const models = await chain.models();
+    return { data: verifyPlan(b, config, models.ok ? models.value.map((m) => m.model) : null) };
+  });
 
   app.get("/models", async () => {
     const models = await chain.models();
