@@ -17,6 +17,11 @@ const MAX_TOKENS: u32 = 8;
 const MIN_MODELS: u32 = 3;
 const MAX_QUESTION_BYTES: usize = 2000;
 const SCHEME_NEARAI_V1: &str = "nearai-v1";
+const SCHEME_DSTACK_V1: &str = "dstack-v1";
+
+fn is_supported_scheme(scheme: &str) -> bool {
+    scheme == SCHEME_NEARAI_V1 || scheme == SCHEME_DSTACK_V1
+}
 const EVENT_STANDARD: &str = "psephex";
 const EVENT_VERSION: &str = "1.0.0";
 const FULFILL_SIGNATURE: &str = "fulfill(uint256,uint8,bytes32)";
@@ -266,7 +271,7 @@ impl AiOracle {
         self.assert_owner();
         let provider = provider.trim().to_string();
         require!(!provider.is_empty(), "provider must not be empty");
-        if scheme != SCHEME_NEARAI_V1 {
+        if !is_supported_scheme(&scheme) {
             env::panic_str(&format!("unsupported signature scheme: {scheme}"));
         }
         let public_key = decode_hex_exact(&public_key_hex, 32, "public key")
@@ -371,6 +376,10 @@ impl AiOracle {
         )
     }
 
+    /// NEAR AI signs `model:sha256(request):sha256(response)`, while the Phala dstack gateway
+    /// signs `sha256(request):sha256(response)`. The model name is inside the hashed request
+    /// body either way, so both bind the answer to the model; the text follows the scheme the
+    /// model was registered with, and a signature made for one format never verifies under the other.
     pub fn signed_text(
         &self,
         request_id: u64,
@@ -381,7 +390,10 @@ impl AiOracle {
         let request_body = self.build_request(request_id, question, model.clone());
         let req_hash = hex::encode(env::sha256_array(request_body.as_bytes()));
         let resp_hash = hex::encode(env::sha256_array(response_body.as_bytes()));
-        format!("{model}:{req_hash}:{resp_hash}")
+        match self.model_keys.get(&model).map(|k| k.scheme.as_str()) {
+            Some(SCHEME_DSTACK_V1) => format!("{req_hash}:{resp_hash}"),
+            _ => format!("{model}:{req_hash}:{resp_hash}"),
+        }
     }
 
     fn check_signed_answer(
@@ -401,7 +413,7 @@ impl AiOracle {
         let Some(key) = self.model_keys.get(model) else {
             return (signed_text, Err("unknown model".to_string()));
         };
-        if key.scheme != SCHEME_NEARAI_V1 {
+        if !is_supported_scheme(&key.scheme) {
             return (
                 signed_text,
                 Err(format!("unsupported signature scheme: {}", key.scheme)),
@@ -2460,6 +2472,122 @@ mod tests {
             vec![
                 json!({"standard": "psephex", "version": "1.0.0", "event": "sign_failed", "data": [{"request_id": 83}]})
             ]
+        );
+    }
+
+    #[test]
+    fn accepts_a_real_phala_gateway_answer_under_the_dstack_scheme() {
+        let fx: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/evidence/runs/phala-signature.json"
+        ))
+        .unwrap();
+        let s = |k: &str| fx[k].as_str().unwrap().to_string();
+        owner_ctx();
+        let mut c = AiOracle::new(
+            "owner.testnet".parse().unwrap(),
+            "v1.signer-prod.testnet".parse().unwrap(),
+            "base-1".to_string(),
+            CHAIN_ID,
+            "0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111".to_string(),
+            FEE_CAP,
+        );
+        c.set_model_key(
+            s("model"),
+            "phala".to_string(),
+            "dstack-v1".to_string(),
+            s("signing_public_key"),
+        );
+        assert_eq!(
+            c.build_request(1000, s("question"), s("model")),
+            s("request_body")
+        );
+        let (text, result) = c.check_signed_answer(
+            1000,
+            s("question"),
+            &s("model"),
+            &s("response_body"),
+            &s("signature_hex"),
+        );
+        assert_eq!(text, s("text"));
+        assert_eq!(result, Ok(Ok("YES".to_string())));
+        let tampered = s("response_body").replace("\"YES\"", "\"NO\"");
+        let (_, rejected) = c.check_signed_answer(
+            1000,
+            s("question"),
+            &s("model"),
+            &tampered,
+            &s("signature_hex"),
+        );
+        assert_eq!(rejected, Err("invalid signature".to_string()));
+    }
+
+    #[test]
+    fn the_two_schemes_are_not_interchangeable() {
+        let fx: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/evidence/runs/phala-signature.json"
+        ))
+        .unwrap();
+        let s = |k: &str| fx[k].as_str().unwrap().to_string();
+        owner_ctx();
+        let mut c = AiOracle::new(
+            "owner.testnet".parse().unwrap(),
+            "v1.signer-prod.testnet".parse().unwrap(),
+            "base-1".to_string(),
+            CHAIN_ID,
+            "0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111".to_string(),
+            FEE_CAP,
+        );
+        c.set_model_key(
+            s("model"),
+            "phala".to_string(),
+            SCHEME_NEARAI_V1.to_string(),
+            s("signing_public_key"),
+        );
+        let (text, result) = c.check_signed_answer(
+            1000,
+            s("question"),
+            &s("model"),
+            &s("response_body"),
+            &s("signature_hex"),
+        );
+        assert!(text.starts_with("phala/gemma-4-26b-a4b-uncensored:"));
+        assert_eq!(result, Err("invalid signature".to_string()));
+    }
+
+    #[test]
+    fn two_of_three_works_across_both_schemes() {
+        let mut c = setup3();
+        owner_ctx();
+        c.set_model_key(
+            MODELS3[2].to_string(),
+            "phala".to_string(),
+            "dstack-v1".to_string(),
+            hex::encode(key_n(2).verifying_key().as_bytes()),
+        );
+        let mut answers = answers3(&c, 7, ["YES", "YES", "NO"]);
+        let dstack_text = c.signed_text(
+            7,
+            QUESTION.to_string(),
+            MODELS3[2].to_string(),
+            answers[2].response_body.clone(),
+        );
+        assert!(!dstack_text.contains(MODELS3[2]));
+        answers[2].signature_hex = hex::encode(key_n(2).sign(dstack_text.as_bytes()).to_bytes());
+        let r = c.verify_consensus(7, QUESTION.to_string(), answers);
+        assert!(r.ok, "{}", r.reason);
+        assert_eq!(r.answer, "YES");
+    }
+
+    #[test]
+    #[should_panic(expected = "unsupported signature scheme: other-v9")]
+    fn set_model_key_still_rejects_unknown_schemes() {
+        let mut c = setup3();
+        owner_ctx();
+        c.set_model_key(
+            "m".to_string(),
+            "x".to_string(),
+            "other-v9".to_string(),
+            "aa".repeat(32),
         );
     }
 }
