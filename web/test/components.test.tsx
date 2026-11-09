@@ -75,7 +75,7 @@ describe("Commands", () => {
 
   it("explains why a request cannot be re-checked", () => {
     render(<Commands plan={verifyPlanSchema.parse(dataOf("verify-5.json"))} />);
-    expect(screen.getByText(/cannot be re-checked/)).toHaveTextContent("model answers without a signature");
+    expect(screen.getByText(/^Why:/)).toHaveTextContent("model answers without a signature");
   });
 });
 

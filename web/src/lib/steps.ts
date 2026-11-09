@@ -77,6 +77,7 @@ function outcomeOf(detail: RequestDetail | null, caseInfo: CaseInfo | null, winn
     if (caseInfo.escalated) return "refunded";
     if (sameAddress(winner, caseInfo.claimant)) return "claimant";
     if (sameAddress(winner, caseInfo.counterparty)) return "counterparty";
+    if (detail && (detail.status === "failed" || detail.status === "rejected")) return "refunded";
     return "settled";
   }
   if (caseExists(caseInfo) && caseInfo.escalated) return "escalated";

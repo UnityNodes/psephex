@@ -11,10 +11,11 @@
   --color-ink: #1b2430;
   --color-muted: #545e6c;
   --color-line: #c3cad4;
-  --color-yes: #2f7d6d;
+  --color-yes: #276a5c;
   --color-no: #8e2f2f;
-  --color-unknown: #6b7480;
+  --color-unknown: #5b6370;
   --color-bronze: #a0712c;
+  --color-bronze-text: #8a5f22;
   --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;

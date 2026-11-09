@@ -30,6 +30,8 @@ describe("views", () => {
     if (!row) throw new Error("missing");
     const s = requestSummary(row);
     expect(Array.from(s.question)).toHaveLength(161);
+    const words = requestSummary({ ...row, question: "word ".repeat(60) });
+    expect(words.question.endsWith("word…")).toBe(true);
     expect(s.question.endsWith("…")).toBe(true);
     expect(s).toMatchObject({ id: 4, status: "rejected", reason: "question is longer than 2000 bytes", answer: null });
     expect(s.createdAt).toBe(new Date(T0).toISOString());

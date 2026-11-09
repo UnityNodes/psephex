@@ -7,7 +7,7 @@ export const FAUCET_URL = "https://docs.base.org/get-started/get-funds";
 const EVM_TX = /^0x[0-9a-fA-F]{64}$/;
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const NEAR_TX = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
-const ATTESTATION_HOSTS: readonly string[] = ["cloud-api.near.ai"];
+const ATTESTATION_HOSTS: readonly string[] = ["cloud-api.near.ai", "api.redpill.ai"];
 
 export function httpUrl(raw: string | undefined, fallback: string): string {
   const value = raw?.trim() || fallback;

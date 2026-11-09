@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { useReadContract, useReadContracts, useTransactionReceipt } from "wagmi";
 import { aiOracleAbi, disputeAbi } from "./abi.js";
 import { createApi, type Api, type RequestDetail, type RequestStatus } from "./api.js";
@@ -109,4 +109,10 @@ export function useDisputeLimits() {
     error: result.error,
     refetch: result.refetch,
   };
+}
+
+export function usePageTitle(title: string): void {
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
 }

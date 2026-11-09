@@ -18,7 +18,7 @@ export function CopyButton({ text }: { text: string }) {
   return (
     <button
       type="button"
-      className="shrink-0 rounded border border-line px-2 py-1 text-xs font-medium hover:border-ink"
+      className="min-h-11 shrink-0 rounded border border-line px-3 text-xs font-medium hover:border-ink"
       onClick={() => {
         const clipboard = navigator.clipboard as Clipboard | undefined;
         if (!clipboard) {
@@ -39,7 +39,7 @@ export function CopyButton({ text }: { text: string }) {
 export function Commands({ plan }: { plan: VerifyPlan }) {
   return (
     <div className="min-w-0">
-      {!plan.available && plan.reason && <p className="text-sm text-muted">The model signatures cannot be re-checked for this request: {plan.reason}.</p>}
+      {!plan.available && plan.reason && <p className="m-0 mb-4 rounded border-l-4 border-line bg-paper p-3 text-sm text-muted [overflow-wrap:anywhere]">Why: {plan.reason}.</p>}
       <ol className="m-0 flex list-none flex-col gap-4 p-0">
         {plan.steps.map((step, i) => (
           <li key={i} className="min-w-0">

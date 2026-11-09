@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ModelView } from "../api.js";
 import { attestationUrl } from "../deployment.js";
-import { useModels } from "../hooks.js";
+import { useModels, usePageTitle } from "../hooks.js";
 
 function randomNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -21,6 +21,7 @@ export function ModelEntry({ m }: { m: ModelView }) {
       <p className="m-0 text-sm">
         Public key registered on NEAR: <code className="font-mono text-xs break-all">{m.publicKey}</code>
       </p>
+      {!link && <p className="m-0 text-sm text-muted">No attestation link is published for this provider.</p>}
       {attestation && link && (
         <div className="flex flex-col gap-1 text-sm">
           <a
@@ -43,12 +44,13 @@ export function ModelEntry({ m }: { m: ModelView }) {
 }
 
 export function ModelsPage() {
+  usePageTitle("The three models - Psephex");
   const models = useModels();
   return (
     <article className="flex max-w-3xl flex-col gap-4">
       <h1 className="m-0 font-display text-4xl font-semibold">The three models</h1>
       <p className="m-0 max-w-[65ch] text-muted">
-        Each model runs inside a TEE on NEAR AI Cloud and signs its answer with a key that never leaves the enclave. The NEAR contract only accepts answers signed by these keys.
+        Two models run on NEAR AI Cloud and sign with a key that never leaves their enclave. Gemma runs on Phala, where an attested Dstack gateway signs for the model it routes to. The NEAR contract only accepts answers signed by these registered keys.
       </p>
       {models.isError && <p className="text-no">The Psephex API did not answer. Reload the page in a moment.</p>}
       <ul className="m-0 list-none p-0">

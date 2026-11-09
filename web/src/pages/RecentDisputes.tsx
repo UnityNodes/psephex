@@ -28,7 +28,13 @@ export function RequestRow({ r }: { r: RequestSummary }) {
   return (
     <li>
       <Link to={`/app/r/${r.id}`} className="flex items-start gap-3 border-b border-line py-3 hover:bg-paper/70">
-        <BallotDisc vote={r.answer} size={24} />
+        {r.status === "failed" || r.status === "rejected" ? (
+          <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-no text-xs font-bold text-no">
+            ✕
+          </span>
+        ) : (
+          <BallotDisc vote={r.answer} size={24} />
+        )}
         <span className="min-w-0 flex-1">
           <span className="block text-sm break-words">
             <span className="font-medium">#{r.id}</span> {displayText(r.question)}
@@ -56,7 +62,7 @@ export function RecentDisputes() {
         </h2>
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Show</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value as RequestStatus | "")} className="rounded border border-line bg-paper px-2 py-1">
+          <select value={status} onChange={(e) => setStatus(e.target.value as RequestStatus | "")} className="min-h-11 rounded border border-line bg-paper px-2">
             {FILTERS.map((f) => (
               <option key={f.label} value={f.value}>
                 {f.label}

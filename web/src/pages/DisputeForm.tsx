@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { formatEther, parseEventLogs } from "viem";
-import { useBalance, useConfig, useConnection, useWriteContract } from "wagmi";
+import { useBalance, useConfig, useConnect, useConnection, useConnectors, useWriteContract } from "wagmi";
 import { readContract, simulateContract, waitForTransactionReceipt } from "wagmi/actions";
 import { aiOracleAbi, disputeAbi } from "../abi.js";
 import { BallotDisc } from "../components/Ballots.js";
@@ -28,6 +28,8 @@ export function DisputeForm() {
   const { limits, error: limitsError, refetch: refetchLimits } = useDisputeLimits();
   const balance = useBalance({ address, chainId: CHAIN.id, query: { enabled: address !== undefined } });
   const write = useWriteContract();
+  const connect = useConnect();
+  const connectors = useConnectors();
   const [question, setQuestion] = useState("");
   const [counterparty, setCounterparty] = useState("");
   const [stakeEth, setStakeEth] = useState("0.001");
@@ -45,7 +47,16 @@ export function DisputeForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!limits || !address) return;
+    if (!address) {
+      if (limits) {
+        const preview = validateDispute({ question, counterparty, stakeEth }, limits, undefined);
+        setErrors(preview.ok ? {} : preview.errors);
+      }
+      const connector = connectors[0];
+      if (connector) connect.mutate({ connector });
+      return;
+    }
+    if (!limits) return;
     const checked = validateDispute({ question, counterparty, stakeEth }, limits, address);
     if (!checked.ok) {
       setErrors(checked.errors);
@@ -188,12 +199,18 @@ export function DisputeForm() {
         {limitsError && <p className="m-0 text-sm text-no">Could not read the dispute limits from Base. Reload the page.</p>}
         <button
           type="submit"
-          disabled={!ready || busy}
+          disabled={busy || (status === "connected" && !ready)}
           className="self-start rounded-full bg-ink px-6 py-3 text-base font-medium text-paper hover:bg-bronze disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {PHASE_LABEL[phase]}
+          {status === "connected" ? PHASE_LABEL[phase] : "Connect wallet to open"}
         </button>
         {!ready && !busy && <p className="m-0 text-xs text-muted">Connect a wallet on {CHAIN.name} to open a dispute.</p>}
+        <p className="m-0 text-xs text-muted">
+          Need test ETH?{" "}
+          <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-bronze">
+            Base Sepolia faucets
+          </a>
+        </p>
         {txLink && (
           <a href={txLink} target="_blank" rel="noopener noreferrer" className="text-sm underline">
             View the transaction on Basescan

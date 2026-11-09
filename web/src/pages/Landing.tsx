@@ -1,11 +1,11 @@
-import type { ReactNode } from "react";
 import { Link } from "react-router";
 import clientSource from "../../../contracts/base/src/examples/YesNoClient.sol?raw";
 import type { Stats } from "../api.js";
 import { Ballots } from "../components/Ballots.js";
 import { CopyButton } from "../components/Commands.js";
-import { AIORACLE_ADDRESS, DISPUTE_ADDRESS, explorer, NEAR_ORACLE_CONTRACT, ORACLE_EVM_ADDRESS, REPO_URL, VIDEO_URL } from "../deployment.js";
-import { useLatestVerdict, useStats } from "../hooks.js";
+import { SiteFooter } from "../components/SiteFooter.js";
+import { AIORACLE_ADDRESS } from "../deployment.js";
+import { useLatestVerdict, usePageTitle, useStats } from "../hooks.js";
 import { displayText } from "../lib/dispute.js";
 import { ballots } from "../lib/steps.js";
 
@@ -28,15 +28,6 @@ const PROVES: readonly string[] = [
   "Only the MPC-derived address can deliver the answer, and only for the matching id and question. There is no bridge and no oracle key on a server.",
   "Answers repeat in practice: 80 of 80 repeats matched in our first check, and 90 of 90 for the dashboard examples.",
 ];
-
-function ExternalLink({ href, children }: { href: string | null; children: ReactNode }) {
-  if (!href) return null;
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-bronze">
-      {children}
-    </a>
-  );
-}
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -103,7 +94,7 @@ function HowItWorks() {
       <ol aria-label="How a question is answered" className="m-0 grid list-none gap-8 p-0 md:grid-cols-5 md:gap-5">
         {STEPS.map((s, i) => (
           <li key={s.title} className="relative flex flex-col gap-2 md:border-t-2 md:border-ink md:pt-4">
-            <span className="font-display text-sm font-semibold text-bronze">
+            <span className="font-display text-sm font-semibold text-bronze-text">
               {i + 1}. {s.where}
             </span>
             <h3 className="m-0 text-base font-semibold">{s.title}</h3>
@@ -184,17 +175,18 @@ function ForDevelopers() {
 }
 
 export function Landing() {
+  usePageTitle("Psephex: an AI oracle for Base checked on NEAR");
   return (
     <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
       <header className="flex flex-wrap items-center justify-between gap-4 py-6">
         <Link to="/" className="font-display text-2xl font-bold tracking-tight">
           Psephex
         </Link>
-        <nav aria-label="Main" className="flex flex-wrap items-center gap-4 text-sm">
-          <a href="#how" className="text-muted hover:text-ink">
+        <nav aria-label="Main" className="flex flex-wrap items-center gap-x-4 text-sm">
+          <a href="#how" className="py-3 text-muted hover:text-ink">
             How it works
           </a>
-          <a href="#developers" className="text-muted hover:text-ink">
+          <a href="#developers" className="py-3 text-muted hover:text-ink">
             For developers
           </a>
           <Link to="/app" className="rounded-full border-2 border-ink px-4 py-1.5 font-medium hover:bg-ink hover:text-paper">
@@ -230,33 +222,7 @@ export function Landing() {
         <ForDevelopers />
       </main>
 
-      <footer className="flex flex-col gap-3 border-t border-line py-8 text-sm">
-        <p className="m-0 text-muted">Testnet only: Base Sepolia and NEAR testnet.</p>
-        <ul className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0">
-          <li>
-            <ExternalLink href={explorer.baseAddress(AIORACLE_ADDRESS)}>AiOracle on Basescan</ExternalLink>
-          </li>
-          <li>
-            <ExternalLink href={explorer.baseAddress(DISPUTE_ADDRESS)}>Dispute on Basescan</ExternalLink>
-          </li>
-          <li>
-            <ExternalLink href={explorer.nearAccount(NEAR_ORACLE_CONTRACT)}>{NEAR_ORACLE_CONTRACT} on Nearblocks</ExternalLink>
-          </li>
-          <li>
-            <ExternalLink href={explorer.baseAddress(ORACLE_EVM_ADDRESS)}>Oracle address on Basescan</ExternalLink>
-          </li>
-          {REPO_URL && (
-            <li>
-              <ExternalLink href={REPO_URL}>Source code</ExternalLink>
-            </li>
-          )}
-          {VIDEO_URL && (
-            <li>
-              <ExternalLink href={VIDEO_URL}>Demo video</ExternalLink>
-            </li>
-          )}
-        </ul>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

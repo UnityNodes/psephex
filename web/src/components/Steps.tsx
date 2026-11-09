@@ -23,7 +23,7 @@ export function Steps({ steps, links }: { steps: readonly Step[]; links?: Partia
               <p className="m-0 font-medium">
                 {s.title} <span className="sr-only">({mark.label})</span>
               </p>
-              {s.detail && <p className={`m-0 text-sm ${s.state === "failed" ? "text-no" : "text-muted"}`}>{s.detail}</p>}
+              {s.detail && <p className={`m-0 text-sm [overflow-wrap:anywhere] ${s.state === "failed" ? "text-no" : "text-muted"}`}>{s.detail}</p>}
               {links?.[s.key] && <div className="mt-1 text-sm">{links[s.key]}</div>}
             </div>
           </li>

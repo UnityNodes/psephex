@@ -10,7 +10,7 @@ import { Commands } from "../components/Commands.js";
 import { Steps } from "../components/Steps.js";
 import { shortAddress } from "../components/Wallet.js";
 import { CHAIN, DISPUTE_ADDRESS, explorer } from "../deployment.js";
-import { useCase, useChainQuestionHash, useRequestDetail, useSettlementWinner, useVerifyPlan } from "../hooks.js";
+import { useCase, useChainQuestionHash, usePageTitle, useRequestDetail, useSettlementWinner, useVerifyPlan } from "../hooks.js";
 import { describeTxError, displayText } from "../lib/dispute.js";
 import { ballots, canRefund, deriveProgress, questionMatchesChain, type CaseInfo, type Outcome, type StepKey } from "../lib/steps.js";
 
@@ -47,6 +47,8 @@ function outcomeText(outcome: Outcome, caseInfo: CaseInfo | null, detail: Reques
     case "escalated":
       return `UNKNOWN. The models could not decide, so the claimant can take back ${stake} now.`;
     case "refunded":
+      if (detail && (detail.status === "failed" || detail.status === "rejected")) return `The relayer stopped this dispute (${detail.reason ?? detail.status}), and the stake of ${stake} was refunded to the claimant.`;
+      if (detail?.answer === "UNKNOWN") return `UNKNOWN, so the claimant took back ${stake}.`;
       return `${stake} went back to the claimant.`;
     case "settled":
       return "The dispute is settled on Base. The Dispute contract on Basescan shows where the stake went.";
@@ -119,6 +121,7 @@ export function RequestPage() {
   const valid = ID.test(raw);
   const id = valid ? Number(raw) : 0;
   const now = useNowSeconds();
+  usePageTitle(valid ? `Dispute #${id} - Psephex` : "Not found - Psephex");
   const caseInfo = useCase(id, valid);
   const detail = useRequestDetail(id, valid);
   const d = detail.data ?? null;
@@ -160,14 +163,21 @@ export function RequestPage() {
         )}
       </header>
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section aria-labelledby="votes-heading" className="flex flex-col gap-6">
           <h2 id="votes-heading" className="m-0 font-display text-2xl font-semibold">
             The vote
           </h2>
-          <Ballots ballots={d ? ballots(d) : []} verdict={d?.answer ?? null} />
+          <Ballots ballots={d ? ballots(d) : []} verdict={d?.answer ?? null} stopped={d !== null && (d.status === "failed" || d.status === "rejected")} />
           <div role="status" className="rounded-md border-l-4 border-bronze bg-paper p-4">
-            <p className="m-0">{outcomeText(progress.outcome, caseInfo.data, d, now)}</p>
+            {detail.isError && <p className="m-0 text-no">The Psephex API did not answer. This page retries on its own; the chain data below is still live.</p>}
+            {!detail.isError && (d !== null || notFound) && <p className="m-0 [overflow-wrap:anywhere]">{outcomeText(progress.outcome, caseInfo.data, d, now)}</p>}
+            {!detail.isError && d === null && !notFound && <p className="m-0 text-muted">Loading the dispute…</p>}
+            {progress.outcome === "settled" && (
+              <a href={explorer.baseAddress(DISPUTE_ADDRESS) ?? undefined} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm underline underline-offset-2 hover:text-bronze">
+                Dispute contract on Basescan
+              </a>
+            )}
             {canRefund(caseInfo.data, now) && <RefundButton id={id} onDone={() => void caseInfo.refetch()} />}
           </div>
         </section>
@@ -186,8 +196,10 @@ export function RequestPage() {
             Check it yourself
           </h2>
           <p className="m-0 max-w-[65ch] text-muted">
-            These commands re-run the signature and 2-of-3 check on the NEAR contract and read the answer from Base. They need <code className="font-mono text-sm">near</code>, <code className="font-mono text-sm">cast</code> and{" "}
-            <code className="font-mono text-sm">jq</code>, and trust nothing but the two chains.
+            {plan.available
+              ? "These commands re-run the signature and 2-of-3 check on the NEAR contract and read the answer from Base."
+              : "The model signatures cannot be re-checked here; these commands confirm the question and the result on Base."}{" "}
+            They need <code className="font-mono text-sm">near</code>, <code className="font-mono text-sm">cast</code> and <code className="font-mono text-sm">jq</code>, and trust nothing but the two chains.
           </p>
           <Commands plan={plan} />
         </section>

@@ -1,15 +1,17 @@
-import { Navigate, NavLink, Route, Routes } from "react-router";
+import { NavLink, Route, Routes } from "react-router";
 import { Wallet } from "./components/Wallet.js";
-import { AIORACLE_ADDRESS, explorer, NEAR_ORACLE_CONTRACT } from "./deployment.js";
+import { SiteFooter } from "./components/SiteFooter.js";
+import { usePageTitle } from "./hooks.js";
 import { DisputeForm } from "./pages/DisputeForm.js";
 import { Landing } from "./pages/Landing.js";
 import { ModelsPage } from "./pages/ModelsPage.js";
 import { RecentDisputes } from "./pages/RecentDisputes.js";
 import { RequestPage } from "./pages/RequestPage.js";
 
-const NAV = ({ isActive }: { isActive: boolean }) => `underline-offset-4 hover:underline ${isActive ? "font-semibold text-ink" : "text-muted"}`;
+const NAV = ({ isActive }: { isActive: boolean }) => `py-3 underline-offset-4 hover:underline ${isActive ? "font-semibold text-ink" : "text-muted"}`;
 
 function Dashboard() {
+  usePageTitle("Open a dispute - Psephex");
   return (
     <div className="grid gap-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
       <section aria-labelledby="open-heading" className="flex flex-col gap-6">
@@ -29,10 +31,21 @@ function Dashboard() {
 }
 
 function NotFound() {
+  usePageTitle("Not found - Psephex");
   return (
-    <p>
-      This page does not exist. <NavLink to="/app">Open a dispute</NavLink>.
-    </p>
+    <div className="flex flex-col gap-3 py-10">
+      <h1 className="m-0 font-display text-4xl font-semibold">This page does not exist</h1>
+      <p className="m-0 text-muted">
+        <NavLink to="/app" className="underline underline-offset-2 hover:text-bronze">
+          Open a dispute
+        </NavLink>{" "}
+        or go back to the{" "}
+        <NavLink to="/" className="underline underline-offset-2 hover:text-bronze">
+          start page
+        </NavLink>
+        .
+      </p>
+    </div>
   );
 }
 
@@ -51,6 +64,9 @@ function Shell() {
             <NavLink to="/app/models" className={NAV}>
               Models
             </NavLink>
+            <a href="/#how" className="py-3 text-muted underline-offset-4 hover:underline">
+              How it works
+            </a>
           </nav>
         </div>
         <Wallet />
@@ -63,15 +79,7 @@ function Shell() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
-      <footer className="flex flex-wrap gap-x-6 gap-y-1 border-t border-line py-6 text-xs text-muted">
-        <span>Testnet only: Base Sepolia and NEAR testnet.</span>
-        <a href={explorer.baseAddress(AIORACLE_ADDRESS) ?? undefined} target="_blank" rel="noopener noreferrer" className="underline">
-          AiOracle on Basescan
-        </a>
-        <a href={explorer.nearAccount(NEAR_ORACLE_CONTRACT)} target="_blank" rel="noopener noreferrer" className="underline">
-          {NEAR_ORACLE_CONTRACT} on Nearblocks
-        </a>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
@@ -81,7 +89,15 @@ export function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/app/*" element={<Shell />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="*"
+        element={
+          <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
+            <NotFound />
+            <SiteFooter />
+          </div>
+        }
+      />
     </Routes>
   );
 }

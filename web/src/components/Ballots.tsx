@@ -13,7 +13,7 @@ export function BallotDisc({ vote, size = 64 }: { vote: Answer | null; size?: nu
   const color = vote ? COLOR[vote] : "transparent";
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" className={vote ? "ballot-drop" : undefined}>
-      <circle cx="32" cy="32" r="26" fill={color} stroke={vote ? color : "var(--color-line)"} strokeWidth="2" strokeDasharray={vote ? undefined : "4 4"} />
+      <circle cx="32" cy="32" r="26" fill={color} stroke={vote ? color : "var(--color-muted)"} strokeWidth="2" strokeDasharray={vote ? undefined : "4 4"} />
       {vote && vote !== "UNKNOWN" && <rect x="30" y="3" width="4" height="58" rx="2" fill="var(--color-ink)" />}
       {vote === "YES" && <circle cx="32" cy="32" r="8" fill="var(--color-ink)" />}
       {vote === "NO" && <circle cx="32" cy="32" r="7" fill={color} stroke="var(--color-ink)" strokeWidth="4" />}
@@ -22,17 +22,17 @@ export function BallotDisc({ vote, size = 64 }: { vote: Answer | null; size?: nu
   );
 }
 
-export function Ballots({ ballots, verdict, compact = false }: { ballots: readonly Ballot[]; verdict: Answer | null; compact?: boolean }) {
+export function Ballots({ ballots, verdict, compact = false, stopped = false }: { ballots: readonly Ballot[]; verdict: Answer | null; compact?: boolean; stopped?: boolean }) {
   const slots = ballots.length > 0 ? ballots : [null, null, null];
   const agree = ballots.filter((b) => b.vote === verdict).length;
   return (
     <figure className="m-0">
-      <ul className={`m-0 flex list-none flex-wrap p-0 ${compact ? "gap-2" : "gap-6"}`} aria-label="Model votes">
+      <ul className={`m-0 grid list-none grid-cols-3 p-0 ${compact ? "gap-2" : "gap-2 sm:flex sm:flex-wrap sm:gap-6"}`} aria-label="Model votes">
         {slots.map((b, i) => (
-          <li key={b?.model ?? i} className={`flex flex-col items-center gap-2 text-center ${compact ? "w-[5.25rem]" : "w-28"}`}>
+          <li key={b?.model ?? i} className={`flex flex-col items-center gap-2 text-center ${compact ? "" : "sm:w-28"}`}>
             <BallotDisc vote={b?.vote ?? null} size={compact ? 48 : 64} />
             <span className={`font-medium break-words ${compact ? "text-xs" : "text-sm"}`}>{b ? shortName(b.model) : "Waiting"}</span>
-            <span className="text-xs text-muted">{b?.vote ? `${MEANING[b.vote]}, signed` : b?.signed ? "signed" : "no answer yet"}</span>
+            <span className="text-xs text-muted">{stopped && !b?.signed ? "not counted" : b?.vote ? `${MEANING[b.vote]}, signed` : b?.signed ? "signed" : "no answer yet"}</span>
           </li>
         ))}
       </ul>
@@ -41,6 +41,8 @@ export function Ballots({ ballots, verdict, compact = false }: { ballots: readon
           <>
             {agree} of {slots.length} signed answers say <strong className={TEXT_CLASS[verdict]}>{verdict}</strong>; two are enough.
           </>
+        ) : stopped ? (
+          "Stopped before a verdict."
         ) : (
           "The verdict needs two matching signed answers."
         )}

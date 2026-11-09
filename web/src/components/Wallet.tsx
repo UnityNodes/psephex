@@ -23,12 +23,12 @@ export function Wallet() {
   if (status !== "connected" || !address) {
     const message = connectError(connect.error);
     return (
-      <div className="flex flex-col items-end gap-1">
+      <div className="ml-auto flex flex-col items-end gap-1">
         <button
           type="button"
           disabled={!connector || connect.isPending}
           onClick={() => connector && connect.mutate({ connector })}
-          className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper hover:bg-bronze disabled:opacity-60"
+          className="min-h-11 rounded-full bg-ink px-4 text-sm font-medium text-paper hover:bg-bronze disabled:opacity-60"
         >
           {connect.isPending ? "Connecting…" : "Connect wallet"}
         </button>

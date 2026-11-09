@@ -49,6 +49,11 @@ describe("deriveProgress", () => {
     expect(p.steps[1]).toMatchObject({ state: "active", detail: "1 of 3 signed answers" });
   });
 
+  it("calls a settled stopped dispute refunded, since only refund settles it without a verdict", () => {
+    expect(deriveProgress({ detail: detail(5), caseInfo: openCase({ settled: true }) }).outcome).toBe("refunded");
+    expect(deriveProgress({ detail: detail(6), caseInfo: openCase({ settled: true }) }).outcome).toBe("refunded");
+  });
+
   it("does not name a winner the chain has not shown, whatever the API says", () => {
     expect(deriveProgress({ detail: detail(7), caseInfo: openCase({ settled: true }) }).outcome).toBe("settled");
     expect(deriveProgress({ detail: detail(7), caseInfo: openCase({ settled: true }), winner: "0x000000000000000000000000000000000000dEaD" }).outcome).toBe("settled");

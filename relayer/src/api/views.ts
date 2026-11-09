@@ -58,7 +58,7 @@ const SUMMARY_CHARS = 160;
 const SHELL_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/~-]*$/;
 const NEAR_TX_HASH = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
-const NEAR_AI_PROVIDER = "near-ai";
+const ATTESTATION_BASES: Readonly<Record<string, string>> = { "near-ai": "https://cloud-api.near.ai", phala: "https://api.redpill.ai" };
 const GET_REQUEST_SIG = "'getRequest(uint256)((address,bytes32,bool))'";
 const SETTLED_BASE_STATUSES = new Set(["success", "reverted"]);
 const FULFILLED_TOPIC = toEventSelector("Fulfilled(uint256,uint8)");
@@ -98,7 +98,10 @@ function iso(ms: number): string {
 
 function shorten(text: string): string {
   const chars = Array.from(text);
-  return chars.length > SUMMARY_CHARS ? `${chars.slice(0, SUMMARY_CHARS).join("")}…` : text;
+  if (chars.length <= SUMMARY_CHARS) return text;
+  const cut = chars.slice(0, SUMMARY_CHARS).join("");
+  const space = cut.lastIndexOf(" ");
+  return `${space > SUMMARY_CHARS / 2 ? cut.slice(0, space) : cut}…`;
 }
 
 function parseStored(text: string | null): unknown {
@@ -257,12 +260,11 @@ export function modelsView(models: readonly ModelInfo[], s: Pick<ViewSettings, "
     provider: m.provider,
     scheme: m.scheme,
     publicKey: m.publicKey,
-    attestation:
-      m.provider === NEAR_AI_PROVIDER
-        ? {
-            url: `${s.nearAiBaseUrl}/v1/attestation/report?model=${encodeURIComponent(m.model)}&signing_algo=ed25519&nonce=`,
-            howTo: "Append 64 hex characters of your own random nonce, then check that the TDX quote report_data contains this public key and your nonce.",
-          }
-        : null,
+    attestation: ATTESTATION_BASES[m.provider]
+      ? {
+          url: `${m.provider === "near-ai" ? s.nearAiBaseUrl : ATTESTATION_BASES[m.provider]}/v1/attestation/report?model=${encodeURIComponent(m.model)}&signing_algo=ed25519&nonce=`,
+          howTo: "The link adds a fresh random nonce, shown below. Check that the TDX quote report_data holds this public key followed by that nonce.",
+        }
+      : null,
   }));
 }
