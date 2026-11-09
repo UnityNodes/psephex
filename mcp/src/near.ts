@@ -38,7 +38,14 @@ export function decodeOutcome(raw: unknown): CallOutcome {
 
 export function createNear(rpcUrl: string, accountId: string | null, privateKey: string | null): NearPort {
   const provider = new JsonRpcProvider({ url: rpcUrl });
-  const account = accountId && privateKey ? new Account(accountId, provider, KeyPairSigner.fromSecretKey(privateKey as KeyPairString)) : null;
+  let account: Account | null = null;
+  if (accountId && privateKey) {
+    try {
+      account = new Account(accountId, provider, KeyPairSigner.fromSecretKey(privateKey as KeyPairString));
+    } catch {
+      throw new Error("NEAR_PRIVATE_KEY is not a valid ed25519 or secp256k1 secret key");
+    }
+  }
   return {
     async view<T>(contract: string, method: string, args: object): Promise<T> {
       return (await provider.callFunction({ contractId: contract, method, args: { ...args } })) as T;

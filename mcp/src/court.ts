@@ -57,11 +57,31 @@ export function describeCase(id: number, c: Case): Record<string, unknown> {
   };
 }
 
+const API_TIMEOUT_MS = 10_000;
+const MAX_API_BYTES = 1_000_000;
+
 export class Court {
+  private spent = 0n;
+
   constructor(
     private readonly near: NearPort,
     private readonly cfg: Config,
   ) {}
+
+  /**
+   * Every NEAR this process attaches, across calls, is counted against one budget, so a model
+   * steered into calling open_case or appeal again and again stops once the budget is gone.
+   */
+  private spend(amount: bigint): void {
+    if (this.spent + amount > this.cfg.budgetYocto) {
+      throw new Error(`this would spend ${formatNear(this.spent + amount)} NEAR in this session, above the budget of ${formatNear(this.cfg.budgetYocto)} NEAR`);
+    }
+    this.spent += amount;
+  }
+
+  budget(): { spent_near: string; budget_near: string } {
+    return { spent_near: formatNear(this.spent), budget_near: formatNear(this.cfg.budgetYocto) };
+  }
 
   async config(): Promise<Record<string, unknown>> {
     return this.near.view(this.cfg.court, "config", {});
@@ -95,8 +115,10 @@ export class Court {
     if (stake === null || stake <= 0n) throw new Error("stake_near must be a positive NEAR amount like 0.05");
     if (stake > this.cfg.maxStakeYocto) throw new Error(`stake ${stakeNear} NEAR is above this agent's cap of ${formatNear(this.cfg.maxStakeYocto)} NEAR`);
     if (!isAccountId(counterparty)) throw new Error("counterparty must be a NEAR account id");
+    if (this.cfg.allowedCounterparties && !this.cfg.allowedCounterparties.includes(counterparty)) throw new Error(`${counterparty} is not on this agent's list of counterparties it may open cases against`);
     if (!(await this.near.accountExists(counterparty))) throw new Error(`${counterparty} does not exist on NEAR`);
     const q = await this.quoteOpen(claim, evidence, stake);
+    this.spend(q.total);
     const out = await this.near.call(this.cfg.court, "open_case", { claim, evidence, counterparty, oracle_reserve: q.reserve.toString() }, q.total, OPEN_GAS);
     return { case_id: out.value, tx: out.txHash, paid_near: formatNear(q.total), stake_near: formatNear(stake), oracle_reserve_near: formatNear(q.reserve), storage_near: formatNear(q.storage) };
   }
@@ -118,6 +140,8 @@ export class Court {
     const c = await this.getRaw(caseId);
     const bond = BigInt(c.appeal_bond);
     if (c.stage !== "decided" || bond === 0n) throw new Error(`case ${caseId} is ${c.stage}; only a decided case can be appealed`);
+    if (bond > this.cfg.maxStakeYocto) throw new Error(`the appeal bond of ${formatNear(bond)} NEAR is above this agent's cap of ${formatNear(this.cfg.maxStakeYocto)} NEAR`);
+    this.spend(bond);
     const out = await this.near.call(this.cfg.court, "appeal", { case_id: caseId }, bond, PARTY_GAS);
     return { case_id: caseId, tx: out.txHash, bond_near: formatNear(bond) };
   }
@@ -179,11 +203,14 @@ export class Court {
    * Psephex API kept, so an agent can trust a verdict without trusting the API or the relayer.
    */
   async verifyVerdict(requestId: number): Promise<Record<string, unknown>> {
-    const res = await fetch(`${this.cfg.apiUrl}/requests/near/${requestId}/verify`);
+    const res = await fetch(`${this.cfg.apiUrl}/requests/near/${requestId}/verify`, { redirect: "error", signal: AbortSignal.timeout(API_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`the Psephex API has no verification data for NEAR request ${requestId} (${res.status})`);
-    const body = (await res.json()) as { data?: { near?: { args?: object } } };
+    const text = await res.text();
+    if (text.length > MAX_API_BYTES) throw new Error("the Psephex API answer is too large");
+    const body = JSON.parse(text) as { data?: { near?: { args?: { request_id?: unknown; chain?: unknown } } } };
     const args = body.data?.near?.args;
     if (!args) throw new Error(`no verify_consensus arguments for NEAR request ${requestId}`);
+    if (args.request_id !== requestId || typeof args.chain !== "string" || !args.chain.startsWith("near:")) throw new Error("the API returned arguments for another request");
     const onChain = await this.near.view<{ answer?: string | null } | null>(this.cfg.oracle, "near_request", { request_id: requestId });
     const check = await this.near.view<{ ok: boolean; answer: string; reason: string; required: number; votes: unknown }>(this.cfg.oracle, "verify_consensus", args);
     return { request_id: requestId, signatures_ok: check.ok, recomputed_answer: check.answer, stored_answer: onChain?.answer ?? null, matches: check.ok && check.answer === onChain?.answer, required: check.required, votes: check.votes, reason: check.reason || null };

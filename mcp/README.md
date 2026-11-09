@@ -18,7 +18,7 @@ Claude Code, Claude Desktop or any MCP client (stdio):
   }
 }
 ```
-Without `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` the server is read-only. `PSEPHEX_MAX_STAKE_NEAR` (default 0.5) caps what one `open_case` can stake, because the model driving the agent can be steered by text it reads. Use a function-call or dedicated agent key, never an owner key.
+Without `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` the server is read-only. Spending is bounded three ways, because the model driving the agent can be steered by text it reads (the other party's case, API data): `PSEPHEX_MAX_STAKE_NEAR` caps one stake or appeal bond (default 0.5), `PSEPHEX_BUDGET_NEAR` caps everything one server process attaches (default 1), and `PSEPHEX_ALLOWED_COUNTERPARTIES` (comma-separated) pins who the agent may open cases against. `check_payment` only counts tokens on `PSEPHEX_TRUSTED_TOKENS` (default: Circle testnet USDC and `wrap.testnet`) and only when every receipt succeeded. `.npmrc` sets `legacy-peer-deps` as in `relayer/` and `web/`: npm 10.9 fails on the vitest peer set otherwise. `PSEPHEX_MAX_STAKE_NEAR` (default 0.5) caps what one `open_case` can stake, because the model driving the agent can be steered by text it reads. Use a function-call or dedicated agent key, never an owner key.
 
 | Tool | What it does |
 |---|---|

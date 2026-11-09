@@ -1,3 +1,4 @@
+import { isAccountId } from "./config.js";
 import type { NearPort } from "./near.js";
 
 export interface PaymentCheck {
@@ -15,7 +16,6 @@ export interface PaymentCheck {
 interface FunctionCall {
   readonly method_name?: string;
   readonly args?: string;
-  readonly deposit?: string;
 }
 
 interface RawAction {
@@ -27,6 +27,7 @@ interface RawAction {
 interface RawTx {
   readonly transaction?: { readonly hash?: string; readonly signer_id?: string; readonly receiver_id?: string; readonly actions?: readonly RawAction[] };
   readonly status?: { readonly SuccessValue?: string; readonly Failure?: unknown };
+  readonly receipts_outcome?: readonly { readonly outcome?: { readonly status?: { readonly Failure?: unknown }; readonly logs?: readonly string[] } }[];
 }
 
 interface Found {
@@ -37,6 +38,9 @@ interface Found {
   readonly x402: boolean;
 }
 
+const AMOUNT = /^\d{1,40}$/;
+const SYMBOL = /^[A-Za-z0-9.]{1,12}$/;
+
 function decodeArgs(args: string | undefined): Record<string, unknown> {
   try {
     return JSON.parse(Buffer.from(args ?? "", "base64").toString("utf8")) as Record<string, unknown>;
@@ -45,22 +49,23 @@ function decodeArgs(args: string | undefined): Record<string, unknown> {
   }
 }
 
+function transferOf(payer: string, asset: string, args: Record<string, unknown>, x402: boolean): Found | null {
+  const amount = String(args.amount ?? "");
+  if (!AMOUNT.test(amount)) return null;
+  const payee = typeof args.receiver_id === "string" && isAccountId(args.receiver_id) ? args.receiver_id : null;
+  return { payer, payee, asset, raw: BigInt(amount), x402 };
+}
+
 function findPayment(tx: RawTx): Found | null {
   const t = tx.transaction;
   if (!t?.signer_id || !t.receiver_id) return null;
   for (const a of t.actions ?? []) {
-    if (a.Transfer?.deposit) return { payer: t.signer_id, payee: t.receiver_id, asset: "NEAR", raw: BigInt(a.Transfer.deposit), x402: false };
-    if (a.FunctionCall?.method_name === "ft_transfer") {
-      const args = decodeArgs(a.FunctionCall.args);
-      return { payer: t.signer_id, payee: typeof args.receiver_id === "string" ? args.receiver_id : null, asset: t.receiver_id, raw: BigInt(String(args.amount ?? "0")), x402: false };
-    }
+    if (a.Transfer?.deposit && AMOUNT.test(a.Transfer.deposit)) return { payer: t.signer_id, payee: t.receiver_id, asset: "NEAR", raw: BigInt(a.Transfer.deposit), x402: false };
+    if (a.FunctionCall?.method_name === "ft_transfer") return transferOf(t.signer_id, t.receiver_id, decodeArgs(a.FunctionCall.args), false);
     const d = a.Delegate?.delegate_action;
     if (d?.sender_id && d.receiver_id) {
-      for (const inner of d.actions ?? []) {
-        if (inner.FunctionCall?.method_name !== "ft_transfer") continue;
-        const args = decodeArgs(inner.FunctionCall.args);
-        return { payer: d.sender_id, payee: typeof args.receiver_id === "string" ? args.receiver_id : null, asset: d.receiver_id, raw: BigInt(String(args.amount ?? "0")), x402: true };
-      }
+      const inner = (d.actions ?? []).find((x) => x.FunctionCall?.method_name === "ft_transfer");
+      if (inner) return transferOf(d.sender_id, d.receiver_id, decodeArgs(inner.FunctionCall?.args), true);
     }
   }
   return null;
@@ -72,29 +77,44 @@ function units(raw: bigint, decimals: number): string {
   return frac ? `${raw / scale}.${frac}` : `${raw / scale}`;
 }
 
+function refuse(txHash: string, payer: string, reason: string): PaymentCheck {
+  return { ok: false, txHash, payer, payee: null, asset: "unknown", amount: null, x402: false, evidence: `Transaction ${txHash} is not a verified payment: ${reason}.`, reason };
+}
+
 /**
- * A payment receipt is only worth something in a case if it is checked on chain. The summary
- * comes from the final transaction, a NEAR transfer, an `ft_transfer`, or an x402 payment
- * (a NEP-366 signed delegate carrying `ft_transfer`, submitted by a facilitator relayer).
+ * A payment receipt is only worth something in a case if it is checked on chain. An x402
+ * payment (a NEP-366 signed delegate carrying `ft_transfer`) succeeds at the outer level even
+ * when the inner transfer fails, so every receipt must have succeeded; and any contract can
+ * expose `ft_transfer`, so only tokens on the trusted list count, with sane metadata.
  */
-export async function checkPayment(near: NearPort, txHash: string, sender: string): Promise<PaymentCheck> {
+export async function checkPayment(near: NearPort, txHash: string, sender: string, trustedTokens: readonly string[]): Promise<PaymentCheck> {
   const tx = (await near.tx(txHash, sender)) as RawTx;
-  const failed = tx.status?.Failure !== undefined;
+  if (tx.transaction?.hash && tx.transaction.hash !== txHash) return refuse(txHash, sender, "the RPC returned another transaction");
   const found = findPayment(tx);
-  if (!found) {
-    return { ok: false, txHash, payer: sender, payee: null, asset: "unknown", amount: null, x402: false, evidence: `Transaction ${txHash} holds no payment.`, reason: "no transfer, ft_transfer or delegated ft_transfer in this transaction" };
-  }
+  if (!found) return refuse(txHash, sender, "no transfer, ft_transfer or delegated ft_transfer in this transaction");
+  const receiptFailed = (tx.receipts_outcome ?? []).some((r) => r.outcome?.status?.Failure !== undefined);
+  if (tx.status?.Failure !== undefined || receiptFailed) return refuse(txHash, found.payer, "the transaction or one of its receipts failed");
   let decimals = 24;
   let symbol = "NEAR";
   if (found.asset !== "NEAR") {
-    const meta = await near.view<{ decimals?: number; symbol?: string }>(found.asset, "ft_metadata", {}).catch(() => ({}) as { decimals?: number; symbol?: string });
-    decimals = meta.decimals ?? 0;
-    symbol = meta.symbol ?? found.asset;
+    if (!trustedTokens.includes(found.asset)) return refuse(txHash, found.payer, `token ${found.asset} is not on the trusted token list`);
+    const meta = await near.view<{ decimals?: unknown; symbol?: unknown }>(found.asset, "ft_metadata", {}).catch(() => null);
+    if (!meta || !Number.isInteger(meta.decimals) || (meta.decimals as number) < 0 || (meta.decimals as number) > 36) return refuse(txHash, found.payer, "the token metadata is missing or invalid");
+    decimals = meta.decimals as number;
+    symbol = typeof meta.symbol === "string" && SYMBOL.test(meta.symbol) ? meta.symbol : "token";
   }
   const amount = units(found.raw, decimals);
+  const payee = found.payee ?? "an unreadable receiver";
   const how = found.x402 ? "x402 payment (signed delegate)" : "payment";
-  const evidence = failed
-    ? `NEAR transaction ${txHash} tried a ${how} of ${amount} ${symbol} from ${found.payer} to ${found.payee ?? "?"} and failed.`
-    : `NEAR transaction ${txHash}: ${how} of ${amount} ${symbol} from ${found.payer} to ${found.payee ?? "?"}, final.`;
-  return { ok: !failed, txHash, payer: found.payer, payee: found.payee, asset: found.asset === "NEAR" ? "NEAR" : `${symbol} (${found.asset})`, amount, x402: found.x402, evidence, reason: failed ? "the transaction failed" : null };
+  return {
+    ok: true,
+    txHash,
+    payer: found.payer,
+    payee: found.payee,
+    asset: found.asset === "NEAR" ? "NEAR" : `${symbol} (${found.asset})`,
+    amount,
+    x402: found.x402,
+    evidence: `NEAR transaction ${txHash}: ${how} of ${amount} ${symbol} from ${found.payer} to ${payee}, all receipts succeeded.`,
+    reason: null,
+  };
 }

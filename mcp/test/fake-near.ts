@@ -23,9 +23,11 @@ export class FakeNear implements NearPort {
     return this.accounts.has(id);
   }
 
+  rpcLies = false;
+
   async tx(hash: string): Promise<unknown> {
-    const t = this.txs.get(hash);
+    const t = this.txs.get(hash) as { transaction?: object } | undefined;
     if (!t) throw new Error("unknown transaction");
-    return t;
+    return { ...t, transaction: { ...t.transaction, hash: this.rpcLies ? "OTHER" : hash } };
   }
 }
