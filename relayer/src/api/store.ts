@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import {
+  BASE_CURSOR,
   SCHEMA_VERSION,
   toBase,
   toModel,
@@ -14,15 +15,15 @@ import {
 } from "../db.js";
 import type { ModelAnswerRow, RequestRow, RequestStatus } from "../types.js";
 
-export interface ListQuery {
-  readonly limit: number;
-  readonly before?: number;
-  readonly status?: RequestStatus;
+export interface ListBound {
+  readonly createdAt: number;
+  readonly id: number;
 }
 
-export interface RequestPage {
-  readonly items: readonly RequestRow[];
-  readonly nextCursor: number | null;
+export interface ListQuery {
+  readonly limit: number;
+  readonly before?: ListBound;
+  readonly status?: RequestStatus;
 }
 
 function counts(rows: readonly { key: string; n: number }[]): Record<string, number> {
@@ -31,16 +32,18 @@ function counts(rows: readonly { key: string; n: number }[]): Record<string, num
 
 export class ReadStore {
   readonly #db: Database.Database;
+  readonly #cursorKey: string;
 
-  private constructor(db: Database.Database) {
+  private constructor(db: Database.Database, cursorKey: string) {
     this.#db = db;
+    this.#cursorKey = cursorKey;
   }
 
   /**
    * The relayer owns the schema and migrates it on start. The API opens the file read-only and
    * refuses any other schema version, so a newer layout is never misread as missing data.
    */
-  static open(path: string): ReadStore {
+  static open(path: string, cursorKey: string = BASE_CURSOR): ReadStore {
     const db = new Database(path, { readonly: true, fileMustExist: true });
     db.pragma("busy_timeout = 5000");
     const row = db.prepare("SELECT MAX(version) AS v FROM schema_migrations").get() as { v: number | null };
@@ -48,7 +51,17 @@ export class ReadStore {
       db.close();
       throw new Error(`relayer database has schema version ${row.v ?? 0}, the API reads version ${SCHEMA_VERSION}`);
     }
-    return new ReadStore(db);
+    const store = new ReadStore(db, cursorKey);
+    const foreign = store.cursorKeys().filter((k) => k !== cursorKey);
+    if (foreign.length > 0) {
+      db.close();
+      throw new Error(`${path} holds the cursor of ${foreign.join(", ")}, not ${cursorKey}`);
+    }
+    return store;
+  }
+
+  cursorKeys(): string[] {
+    return (this.#db.prepare("SELECT chain FROM cursor ORDER BY chain").all() as { chain: string }[]).map((r) => r.chain);
   }
 
   get readonly(): boolean {
@@ -59,13 +72,15 @@ export class ReadStore {
     if (this.#db.open) this.#db.close();
   }
 
-  listRequests(q: ListQuery): RequestPage {
-    const where = [q.before === undefined ? null : "id < @before", q.status === undefined ? null : "status = @status"].filter((w) => w !== null);
-    const sql = `SELECT * FROM requests ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY id DESC LIMIT @take`;
-    const rows = this.#db.prepare(sql).all({ before: q.before ?? null, status: q.status ?? null, take: q.limit + 1 }) as RequestDbRow[];
-    const items = rows.slice(0, q.limit).map(toRequest);
-    const last = items.at(-1);
-    return { items, nextCursor: rows.length > q.limit && last ? last.id : null };
+  /**
+   * Rows come newest first by (created_at, id). The bound is exclusive on that pair, so a page
+   * boundary inside one millisecond neither repeats nor skips a request.
+   */
+  listRequests(q: ListQuery): RequestRow[] {
+    const where = [q.before === undefined ? null : "(created_at < @t OR (created_at = @t AND id < @id))", q.status === undefined ? null : "status = @status"].filter((w) => w !== null);
+    const sql = `SELECT * FROM requests ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC, id DESC LIMIT @take`;
+    const rows = this.#db.prepare(sql).all({ t: q.before?.createdAt ?? null, id: q.before?.id ?? null, status: q.status ?? null, take: q.limit }) as RequestDbRow[];
+    return rows.map(toRequest);
   }
 
   request(id: number): RequestRow | undefined {
@@ -100,7 +115,7 @@ export class ReadStore {
   }
 
   cursor(): bigint | null {
-    const row = this.#db.prepare("SELECT last_block FROM cursor WHERE chain = 'base'").get() as { last_block: string } | undefined;
+    const row = this.#db.prepare("SELECT last_block FROM cursor WHERE chain = ?").get(this.#cursorKey) as { last_block: string } | undefined;
     return row ? BigInt(row.last_block) : null;
   }
 

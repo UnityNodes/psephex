@@ -1,9 +1,35 @@
 import Database from "better-sqlite3";
-import type { AskedEvent, Clock, ModelAnswerRow, ModelReply, ModelSignature, RequestRow, RequestStatus } from "./types.js";
+import type { AskedEvent, Clock, ModelAnswerRow, ModelReply, ModelSignature, NearRequestInfo, RequestRow, RequestStatus } from "./types.js";
 
 export interface InvalidAsked {
   readonly event: AskedEvent;
   readonly reason: string;
+}
+
+export interface InvalidNearRequest {
+  readonly request: NearRequestInfo;
+  readonly reason: string;
+}
+
+interface NewRequest {
+  readonly id: number;
+  readonly requester: string;
+  readonly origin: string | null;
+  readonly question: string;
+  readonly questionHash: string;
+  readonly paidWei: string;
+  readonly askedTx: string;
+}
+
+export const BASE_CURSOR = "base";
+export const NEAR_CURSOR = "near";
+
+function fromAsked(e: AskedEvent): NewRequest {
+  return { id: Number(e.id), requester: e.requester, origin: null, question: e.question, questionHash: e.questionHash, paidWei: e.paidWei.toString(), askedTx: e.txHash };
+}
+
+function fromNear(r: NearRequestInfo): NewRequest {
+  return { id: r.requestId, requester: r.asker, origin: r.asker, question: r.question, questionHash: r.questionHash, paidWei: r.paidYocto, askedTx: "" };
 }
 
 const MIGRATIONS: readonly string[] = [
@@ -267,36 +293,45 @@ export class Repository {
     return row ? BigInt(row.last_block) : null;
   }
 
-  recordAsked(events: readonly AskedEvent[], toBlock: bigint, invalid: readonly InvalidAsked[] = []): number[] {
+  cursorKeys(): string[] {
+    return (this.#db.prepare("SELECT chain FROM cursor ORDER BY chain").all() as { chain: string }[]).map((r) => r.chain);
+  }
+
+  recordAsked(events: readonly AskedEvent[], toBlock: bigint, invalid: readonly InvalidAsked[] = [], cursorKey: string = BASE_CURSOR): number[] {
+    return this.#record(
+      events.map(fromAsked),
+      invalid.map((i) => ({ row: fromAsked(i.event), reason: i.reason })),
+      cursorKey,
+      toBlock,
+    );
+  }
+
+  recordNearRequests(requests: readonly NearRequestInfo[], lastId: number, invalid: readonly InvalidNearRequest[] = []): number[] {
+    return this.#record(
+      requests.map(fromNear),
+      invalid.map((i) => ({ row: fromNear(i.request), reason: i.reason })),
+      NEAR_CURSOR,
+      BigInt(lastId),
+    );
+  }
+
+  #record(rows: readonly NewRequest[], invalid: readonly { row: NewRequest; reason: string }[], cursorKey: string, cursorValue: bigint): number[] {
     const insert = this.#db.prepare(
-      `INSERT OR IGNORE INTO requests (id, requester, question, question_hash, paid_wei, asked_tx, status, reason, created_at, updated_at)
-       VALUES (@id, @requester, @question, @questionHash, @paidWei, @askedTx, @status, @reason, @now, @now)`,
+      `INSERT OR IGNORE INTO requests (id, requester, origin, question, question_hash, paid_wei, asked_tx, status, reason, created_at, updated_at)
+       VALUES (@id, @requester, @origin, @question, @questionHash, @paidWei, @askedTx, @status, @reason, @now, @now)`,
     );
     const existing = this.#db.prepare("SELECT question_hash FROM requests WHERE id = ?");
-    const cursor = this.#db.prepare(
-      "INSERT INTO cursor (chain, last_block) VALUES ('base', ?) ON CONFLICT(chain) DO UPDATE SET last_block = excluded.last_block",
-    );
+    const cursor = this.#db.prepare("INSERT INTO cursor (chain, last_block) VALUES (?, ?) ON CONFLICT(chain) DO UPDATE SET last_block = excluded.last_block");
     const now = this.#clock.now();
     const conflicts: number[] = [];
-    const row = (e: AskedEvent, status: RequestStatus, reason: string | null) => ({
-      id: Number(e.id),
-      requester: e.requester,
-      question: e.question,
-      questionHash: e.questionHash,
-      paidWei: e.paidWei.toString(),
-      askedTx: e.txHash,
-      status,
-      reason,
-      now,
-    });
     this.#db.transaction(() => {
-      for (const e of events) {
-        const prior = existing.get(Number(e.id)) as { question_hash: string } | undefined;
-        if (prior && prior.question_hash.toLowerCase() !== e.questionHash.toLowerCase()) conflicts.push(Number(e.id));
-        insert.run(row(e, "seen", null));
+      for (const r of rows) {
+        const prior = existing.get(r.id) as { question_hash: string } | undefined;
+        if (prior && prior.question_hash.toLowerCase() !== r.questionHash.toLowerCase()) conflicts.push(r.id);
+        insert.run({ ...r, status: "seen", reason: null, now });
       }
-      for (const { event, reason } of invalid) insert.run(row(event, "rejected", reason));
-      cursor.run(toBlock.toString());
+      for (const { row, reason } of invalid) insert.run({ ...row, status: "rejected", reason, now });
+      cursor.run(cursorKey, cursorValue.toString());
     })();
     return conflicts;
   }

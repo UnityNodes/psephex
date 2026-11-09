@@ -1,16 +1,18 @@
 import { getAddress, toEventSelector } from "viem";
 import type { BaseTxRow, NearTxRow } from "../db.js";
+import type { SourceName } from "../sources.js";
 import type { ModelAnswerRow, ModelInfo, RequestRow } from "../types.js";
+import type { ApiEvmSource, ApiNearSource, ApiSource } from "./config.js";
 
 export interface ViewSettings {
   readonly publicUrl: string;
-  readonly publicBaseRpcUrl: string;
   readonly nearNetwork: string;
   readonly nearOracleContract: string;
-  readonly aiOracleAddress: string;
-  readonly oracleEvmAddress: string;
+  readonly oracleEvmAddress: string | null;
   readonly nearAiBaseUrl: string;
 }
+
+export type SourceRef = Pick<ApiSource, "source" | "chain">;
 
 export interface RequestBundle {
   readonly request: RequestRow;
@@ -20,6 +22,8 @@ export interface RequestBundle {
 }
 
 export interface RequestSummary {
+  readonly source: SourceName;
+  readonly chain: string;
   readonly id: number;
   readonly question: string;
   readonly answer: string | null;
@@ -37,6 +41,8 @@ export interface VerifyStep {
 }
 
 export interface VerifyPlan {
+  readonly source: SourceName;
+  readonly chain: string;
   readonly requestId: number;
   readonly available: boolean;
   readonly reason: string | null;
@@ -46,6 +52,7 @@ export interface VerifyPlan {
     readonly method: "verify_consensus";
     readonly network: string;
     readonly args: {
+      readonly chain: string;
       readonly request_id: number;
       readonly question: string;
       readonly answers: readonly { readonly model: string; readonly response_body: string; readonly signature_hex: string }[];
@@ -113,8 +120,10 @@ function parseStored(text: string | null): unknown {
   }
 }
 
-export function requestSummary(r: RequestRow): RequestSummary {
+export function requestSummary(r: RequestRow, src: SourceRef): RequestSummary {
   return {
+    source: src.source,
+    chain: src.chain,
     id: r.id,
     question: shorten(r.question),
     answer: r.answer,
@@ -126,10 +135,27 @@ export function requestSummary(r: RequestRow): RequestSummary {
   };
 }
 
-export function requestDetail(input: RequestBundle & { readonly models: readonly ModelInfo[] | null }) {
-  const { request: r, answers, nearTxs, baseTxs, models } = input;
+/**
+ * API v2 names the transaction lists nearTxs and baseTxs. The v1 names near and base stay as
+ * the same arrays so dashboards built against v1 keep reading request details.
+ */
+export function requestDetail(input: RequestBundle & { readonly models: readonly ModelInfo[] | null; readonly source: SourceRef }) {
+  const { request: r, answers, nearTxs, baseTxs, models, source } = input;
   const keys = new Map((models ?? []).map((m) => [m.model, m.publicKey]));
+  const near = nearTxs.map((t) => ({
+    txHash: t.txHash,
+    nonce: t.nonce,
+    maxFeePerGas: t.maxFee,
+    maxPriorityFeePerGas: t.maxPriorityFee,
+    ok: t.ok,
+    result: parseStored(t.signatureJson),
+    unsignedTx: t.unsignedTx,
+    createdAt: iso(t.createdAt),
+  }));
+  const base = baseTxs.map((t) => ({ txHash: t.txHash, status: t.status, gasUsed: t.gasUsed, events: parseStored(t.eventsJson), sentAt: iso(t.sentAt) }));
   return {
+    source: source.source,
+    chain: source.chain,
     id: r.id,
     requester: r.requester,
     origin: r.origin,
@@ -156,17 +182,10 @@ export function requestDetail(input: RequestBundle & { readonly models: readonly
       attempts: a.attempts,
       latencyMs: a.latencyMs,
     })),
-    near: nearTxs.map((t) => ({
-      txHash: t.txHash,
-      nonce: t.nonce,
-      maxFeePerGas: t.maxFee,
-      maxPriorityFeePerGas: t.maxPriorityFee,
-      ok: t.ok,
-      result: parseStored(t.signatureJson),
-      unsignedTx: t.unsignedTx,
-      createdAt: iso(t.createdAt),
-    })),
-    base: baseTxs.map((t) => ({ txHash: t.txHash, status: t.status, gasUsed: t.gasUsed, events: parseStored(t.eventsJson), sentAt: iso(t.sentAt) })),
+    nearTxs: near,
+    baseTxs: base,
+    near,
+    base,
   };
 }
 
@@ -190,25 +209,31 @@ function unverifiableReason(b: RequestBundle, currentModels: readonly string[] |
   return setMismatch(b, currentModels);
 }
 
-function chainSteps(b: RequestBundle, s: ViewSettings, file: string): VerifyStep[] {
+function hashStep(b: RequestBundle, file: string, where: string): VerifyStep {
+  return { title: `Hash the question and compare it with the hash ${where} stored`, command: `jq -j .question ${file} | cast keccak`, expect: [hexToken(b.request.questionHash.toLowerCase(), 32)] };
+}
+
+function evmSteps(b: RequestBundle, s: ViewSettings, src: ApiEvmSource, file: string): VerifyStep[] {
   const id = shellToken(String(b.request.id));
-  const rpc = shellToken(s.publicBaseRpcUrl);
+  const rpc = shellToken(src.publicRpcUrl);
   const network = shellToken(s.nearNetwork);
   const hash = hexToken(b.request.questionHash.toLowerCase(), 32);
   const steps: VerifyStep[] = [
-    { title: "Hash the question and compare it with the hash Base stored", command: `jq -j .question ${file} | cast keccak`, expect: [hash] },
-    { title: "Read the request on Base: requester, question hash, fulfilled", command: `cast call ${hexToken(s.aiOracleAddress, 20)} ${GET_REQUEST_SIG} ${id} --rpc-url ${rpc}`, expect: [hash] },
+    hashStep(b, file, src.name),
+    { title: `Read the request on ${src.name}: requester, question hash, fulfilled`, command: `cast call ${hexToken(src.aiOracleAddress, 20)} ${GET_REQUEST_SIG} ${id} --rpc-url ${rpc}`, expect: [hash] },
   ];
   for (const tx of b.nearTxs.filter((t) => t.ok === true)) {
     steps.push({ title: "Inspect the NEAR transaction that checked 2 of 3 and asked MPC to sign", command: `near transaction view-status ${nearTxToken(tx.txHash)} network-config ${network}` });
   }
   for (const tx of b.baseTxs.filter((t) => SETTLED_BASE_STATUSES.has(t.status))) {
     const txHash = hexToken(tx.txHash, 32);
-    steps.push({ title: "Check the Base transaction that delivered the answer", command: `cast receipt ${txHash} --rpc-url ${rpc}`, expect: [tx.status === "success" ? "1 (success)" : "0 (failed)"] });
-    steps.push({ title: "Check it was sent from the MPC-derived oracle address", command: `cast tx ${txHash} from --rpc-url ${rpc}`, expect: [getAddress(s.oracleEvmAddress)] });
+    steps.push({ title: `Check the ${src.name} transaction that delivered the answer`, command: `cast receipt ${txHash} --rpc-url ${rpc}`, expect: [tx.status === "success" ? "1 (success)" : "0 (failed)"] });
+    if (s.oracleEvmAddress !== null) {
+      steps.push({ title: "Check it was sent from the MPC-derived oracle address", command: `cast tx ${txHash} from --rpc-url ${rpc}`, expect: [getAddress(s.oracleEvmAddress)] });
+    }
     const answerCode = b.request.answer === null ? undefined : ANSWER_CODES[b.request.answer];
     if (tx.status === "success" && answerCode !== undefined) {
-      const oracle = hexToken(s.aiOracleAddress.toLowerCase(), 20);
+      const oracle = hexToken(src.aiOracleAddress.toLowerCase(), 20);
       const filter = `'.logs[] | select((.address | ascii_downcase) == "${oracle}" and .topics[0] == "${FULFILLED_TOPIC}") | .data'`;
       steps.push({
         title: "Read the answer code AiOracle emitted in Fulfilled (0 UNKNOWN, 1 YES, 2 NO)",
@@ -220,22 +245,46 @@ function chainSteps(b: RequestBundle, s: ViewSettings, file: string): VerifyStep
   return steps;
 }
 
-export function verifyPlan(b: RequestBundle, s: ViewSettings, currentModels: readonly string[] | null = null): VerifyPlan {
+function nearSteps(b: RequestBundle, s: ViewSettings, src: ApiNearSource, file: string): VerifyStep[] {
   const id = shellToken(String(b.request.id));
-  const file = `psephex-${id}.json`;
+  const contract = shellToken(s.nearOracleContract);
+  const network = shellToken(s.nearNetwork);
+  const hash = hexToken(b.request.questionHash.toLowerCase(), 32);
+  const stored = b.request.status === "confirmed" && b.request.answer ? [`"answer": "${b.request.answer}"`] : [];
+  const steps: VerifyStep[] = [
+    hashStep(b, file, src.name),
+    {
+      title: "Read the request and the stored verdict on the NEAR contract",
+      command: `near contract call-function as-read-only ${contract} near_request json-args '{"request_id":${id}}' network-config ${network} now`,
+      expect: [`"question_hash": "${hash}"`, ...stored],
+    },
+  ];
+  for (const tx of b.nearTxs.filter((t) => t.ok === true)) {
+    steps.push({ title: "Inspect the fulfill_on_near transaction that checked 2 of 3 and stored the verdict", command: `near transaction view-status ${nearTxToken(tx.txHash)} network-config ${network}` });
+  }
+  return steps;
+}
+
+export function verifyPlan(b: RequestBundle, s: ViewSettings, src: ApiSource, currentModels: readonly string[] | null = null): VerifyPlan {
+  const id = shellToken(String(b.request.id));
+  const source = shellToken(src.source);
+  const file = `psephex-${source}-${id}.json`;
   const reason = unverifiableReason(b, currentModels);
   const contract = shellToken(s.nearOracleContract);
   const network = shellToken(s.nearNetwork);
   const download: VerifyStep = {
     title: "Download the exact arguments the oracle used",
-    command: `curl -s '${shellToken(s.publicUrl)}/requests/${id}/verify' | jq '.data.near.args' > ${file}`,
+    command: `curl -s '${shellToken(s.publicUrl)}/requests/${source}/${id}/verify' | jq '.data.near.args' > ${file}`,
   };
   const consensus: VerifyStep = {
     title: "Re-run the signature and 2-of-3 check on the NEAR contract",
     command: `near contract call-function as-read-only ${contract} verify_consensus file-args ${file} network-config ${network} now`,
     expect: [`"ok": true`, ...(b.request.answer ? [`"answer": "${b.request.answer}"`] : [])],
   };
+  const chainSteps = src.kind === "near" ? nearSteps(b, s, src, file) : evmSteps(b, s, src, file);
   return {
+    source: src.source,
+    chain: src.chain,
     requestId: b.request.id,
     available: reason === null,
     reason: plainText(reason),
@@ -245,13 +294,40 @@ export function verifyPlan(b: RequestBundle, s: ViewSettings, currentModels: rea
       method: "verify_consensus",
       network: s.nearNetwork,
       args: {
+        chain: src.chain,
         request_id: b.request.id,
         question: b.request.question,
         answers: b.answers.map((a) => ({ model: a.model, response_body: a.responseBody ?? "", signature_hex: a.signatureHex ?? "" })),
       },
     },
-    steps: [download, ...(reason === null ? [consensus] : []), ...chainSteps(b, s, file)],
+    steps: [download, ...(reason === null ? [consensus] : []), ...chainSteps],
   };
+}
+
+export function chainsView(sources: readonly ApiSource[], s: Pick<ViewSettings, "oracleEvmAddress" | "nearOracleContract">, nearFeeYocto: bigint | null) {
+  return sources.map((src) =>
+    src.kind === "evm"
+      ? {
+          source: src.source,
+          chain: src.chain,
+          name: src.name,
+          kind: src.kind,
+          explorer: src.explorer,
+          aiOracle: src.aiOracleAddress,
+          ...(src.dispute === null ? {} : { dispute: src.dispute }),
+          ...(s.oracleEvmAddress === null ? {} : { oracleAddress: s.oracleEvmAddress }),
+        }
+      : {
+          source: src.source,
+          chain: src.chain,
+          name: src.name,
+          kind: src.kind,
+          explorer: src.explorer,
+          aiOracle: s.nearOracleContract,
+          ...(src.dispute === null ? {} : { dispute: src.dispute }),
+          nearFee: nearFeeYocto === null ? null : nearFeeYocto.toString(),
+        },
+  );
 }
 
 export function modelsView(models: readonly ModelInfo[], s: Pick<ViewSettings, "nearAiBaseUrl">) {

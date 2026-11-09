@@ -21,11 +21,57 @@ describe("loadApiConfig", () => {
       corsOrigin: null,
       rateLimitPerMinute: 120,
       trustProxy: false,
-      publicBaseRpcUrl: "https://sepolia.base.org",
       nearNetwork: "testnet",
-      baseChainId: 84532,
-      aiOracleAddress: "0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111",
     });
+    expect(c.sources).toEqual([
+      {
+        source: "base",
+        kind: "evm",
+        chain: "eip155:84532",
+        name: "Base Sepolia",
+        dbPath: "/var/lib/psephex/relayer.sqlite",
+        explorer: "https://sepolia.basescan.org",
+        rpcUrl: "https://base.rpc.test/key",
+        publicRpcUrl: "https://sepolia.base.org",
+        aiOracleAddress: "0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111",
+        chainId: 84532,
+        dispute: null,
+      },
+    ]);
+  });
+
+  it("lists every configured source with its own database and contracts", () => {
+    const c = loadApiConfig({
+      ...BASE_ENV,
+      API_SOURCES: "base, arbitrum,near",
+      ARBITRUM_DB_PATH: "/var/lib/psephex/relayer-arbitrum.sqlite",
+      ARBITRUM_RPC_URL: "https://arb.rpc.test/key",
+      ARBITRUM_AIORACLE_ADDRESS: "0x1111111111111111111111111111111111111111",
+      ARBITRUM_DISPUTE_ADDRESS: "0x2222222222222222222222222222222222222222",
+      NEAR_DB_PATH: "/var/lib/psephex/relayer-near.sqlite",
+      NEAR_DISPUTE_CONTRACT: "dispute.psephex.testnet",
+    });
+    expect(c.sources.map((s) => [s.source, s.chain, s.dbPath])).toEqual([
+      ["base", "eip155:84532", "/var/lib/psephex/relayer.sqlite"],
+      ["arbitrum", "eip155:421614", "/var/lib/psephex/relayer-arbitrum.sqlite"],
+      ["near", "near:testnet", "/var/lib/psephex/relayer-near.sqlite"],
+    ]);
+    expect(c.sources[1]).toMatchObject({ publicRpcUrl: "https://sepolia-rollup.arbitrum.io/rpc", explorer: "https://sepolia.arbiscan.io", dispute: "0x2222222222222222222222222222222222222222" });
+    expect(c.sources[2]).toMatchObject({ kind: "near", dispute: "dispute.psephex.testnet", explorer: "https://testnet.nearblocks.io" });
+  });
+
+  it("serves NEAR alone without EVM settings", () => {
+    const c = loadApiConfig({ NEAR_RPC_URL: BASE_ENV.NEAR_RPC_URL, NEAR_ORACLE_CONTRACT: BASE_ENV.NEAR_ORACLE_CONTRACT, NEAR_RELAYER_ACCOUNT: BASE_ENV.NEAR_RELAYER_ACCOUNT, API_SOURCES: "near", NEAR_DB_PATH: "/n.sqlite" });
+    expect(c.oracleEvmAddress).toBeNull();
+    expect(c.sources.map((s) => s.source)).toEqual(["near"]);
+  });
+
+  it("rejects unknown, repeated or database-sharing sources", () => {
+    expect(() => loadApiConfig({ ...BASE_ENV, API_SOURCES: "base,solana" })).toThrow(/unknown source "solana"/);
+    expect(() => loadApiConfig({ ...BASE_ENV, API_SOURCES: "base,base" })).toThrow(/twice/);
+    expect(() => loadApiConfig({ ...BASE_ENV, API_SOURCES: "base,near", NEAR_DB_PATH: BASE_ENV.DB_PATH })).toThrow(/own database/);
+    expect(() => loadApiConfig({ ...BASE_ENV, API_SOURCES: "base,arbitrum" })).toThrow(/ARBITRUM_DB_PATH is required/);
+    expect(() => loadApiConfig({ ...BASE_ENV, API_SOURCES: "near", NEAR_DB_PATH: "/n", NEAR_DISPUTE_CONTRACT: "x;rm" })).toThrow(/NEAR account/);
   });
 
   it("refuses to start with relayer secrets in its environment", () => {
@@ -66,6 +112,6 @@ describe("loadApiConfig", () => {
 
   it("requires the chain settings", () => {
     const { DB_PATH: _db, ...rest } = BASE_ENV;
-    expect(() => loadApiConfig(rest)).toThrow(/DB_PATH is required/);
+    expect(() => loadApiConfig(rest)).toThrow(/BASE_DB_PATH or DB_PATH is required/);
   });
 });

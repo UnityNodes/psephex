@@ -9,6 +9,7 @@ export interface ScannerSettings {
   readonly startBlock: bigint;
   readonly confirmations: number;
   readonly logBlockRange: bigint;
+  readonly cursorKey: string;
 }
 
 export interface ScannerDeps {
@@ -38,7 +39,7 @@ export class Scanner {
   async poll(target?: bigint): Promise<PollResult | null> {
     const { repo, base, settings } = this.#d;
     const safeHead = target ?? (await this.#safeHead());
-    const cursor = repo.getCursor("base");
+    const cursor = repo.getCursor(settings.cursorKey);
     const from = cursor === null ? settings.startBlock : cursor + 1n;
     if (from > safeHead) return null;
     const rangeEnd = from + settings.logBlockRange - 1n;
@@ -47,7 +48,7 @@ export class Scanner {
     const checked = all.map((event) => ({ event, ok: this.#consistent(event) }));
     const events = checked.filter((c) => c.ok).map((c) => c.event);
     const invalid = checked.filter((c) => !c.ok).map((c) => ({ event: c.event, reason: "question hash does not match the emitted question" }));
-    const conflicts = repo.recordAsked(events, to, invalid);
+    const conflicts = repo.recordAsked(events, to, invalid, settings.cursorKey);
     if (conflicts.length > 0) this.#d.log.error({ ids: conflicts, alert: true }, "request ids reappeared with another question; possible reorg, kept the stored question");
     if (events.length > 0) this.#d.log.info({ from, to, ids: events.map((e) => e.id.toString()) }, "new requests");
     return { from, to, found: events.length };
@@ -57,6 +58,14 @@ export class Scanner {
    * Base Sepolia produces a block every 200 ms, faster than one getLogs round trip, so
    * polling up to the live head never ends. Catch-up stops at the safe head seen at the start.
    */
+  async head(): Promise<bigint> {
+    return this.#d.base.headBlock();
+  }
+
+  scanned(): bigint {
+    return this.#d.repo.getCursor(this.#d.settings.cursorKey) ?? -1n;
+  }
+
   async catchUp(): Promise<number> {
     const target = await this.#safeHead();
     let rounds = 0;

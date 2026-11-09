@@ -10,7 +10,7 @@ describe("Scanner", () => {
   const log = { info: () => {}, warn: () => {}, error: (_o: object, m: string) => errors.push(m) };
 
   function scanner(range = 100n, confirmations = 2, startBlock = 50n): Scanner {
-    return new Scanner({ repo, base, log, settings: { startBlock, confirmations, logBlockRange: range } });
+    return new Scanner({ repo, base, log, settings: { startBlock, confirmations, logBlockRange: range, cursorKey: "base" } });
   }
 
   beforeEach(() => {

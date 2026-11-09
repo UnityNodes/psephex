@@ -90,7 +90,10 @@ export interface MpcSignature {
 
 export interface OnSignedResult {
   readonly ok: boolean;
+  readonly chain?: string;
   readonly request_id?: number;
+  readonly answer?: string;
+  readonly delivered?: boolean;
   readonly unsigned_tx?: string;
   readonly payload?: string;
   readonly signature?: MpcSignature;
@@ -104,6 +107,22 @@ export interface FulfillArgs {
   readonly nonce: number;
   readonly max_fee_per_gas: string;
   readonly max_priority_fee_per_gas: string;
+}
+
+export interface NearFulfillArgs {
+  readonly request_id: number;
+  readonly answers: readonly ConsensusAnswer[];
+}
+
+export interface NearRequestInfo {
+  readonly chain: string;
+  readonly requestId: number;
+  readonly asker: string;
+  readonly question: string;
+  readonly questionHash: string;
+  readonly paidYocto: string;
+  readonly answer: string | null;
+  readonly votes: readonly Vote[];
 }
 
 export interface SignedNearTx {
@@ -124,8 +143,15 @@ export interface NearOraclePort {
   isFulfilled(requestId: number): Promise<boolean>;
   maxFeePerGasCap(): Promise<bigint>;
   signFulfill(args: FulfillArgs): Promise<SignedNearTx>;
+  signFulfillNear(args: NearFulfillArgs): Promise<SignedNearTx>;
+  nearRequest(requestId: number): Promise<NearRequestInfo | null>;
   sendSigned(signed: SignedNearTx): Promise<NearTxOutcome>;
   txOutcome(txHash: string): Promise<NearTxOutcome>;
+}
+
+export interface NearRequestsPort {
+  nearRequests(fromId: number, limit: number): Promise<NearRequestInfo[]>;
+  lastNearRequestId(): Promise<number>;
 }
 
 export interface ModelReply {

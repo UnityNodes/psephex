@@ -1,7 +1,9 @@
 import { getAddress, isAddress, parseGwei, type Address } from "viem";
+import { evmChainKey, isSourceName, NEAR_TESTNET_CHAIN, SOURCES, type SourceName } from "./sources.js";
 
-export interface RelayerConfig {
-  readonly baseRpcUrl: string;
+export interface CommonRelayerConfig {
+  readonly source: SourceName;
+  readonly chain: string;
   readonly nearRpcUrl: string;
   readonly nearAiBaseUrl: string;
   readonly nearAiApiKey: string;
@@ -10,25 +12,40 @@ export interface RelayerConfig {
   readonly nearRelayerAccount: string;
   readonly nearRelayerKey: string;
   readonly nearOracleContract: string;
-  readonly aiOracleAddress: Address;
-  readonly oracleEvmAddress: Address;
-  readonly baseChainId: number;
-  readonly startBlock: bigint;
-  readonly confirmations: number;
   readonly pollMs: number;
-  readonly logBlockRange: bigint;
-  readonly maxFeePerGas: bigint;
   readonly fulfillGasTera: number;
   readonly dailyModelBudget: number;
   readonly perAddressHourlyLimit: number;
   readonly modelRetries: number;
   readonly mpcRetries: number;
-  readonly receiptAlertMs: number;
   readonly stuckMs: number;
   readonly maxQueue: number;
-  readonly feeBaseMultiplier: number;
   readonly dbPath: string;
 }
+
+export interface EvmRelayerConfig extends CommonRelayerConfig {
+  readonly kind: "evm";
+  readonly evmRpcUrl: string;
+  readonly aiOracleAddress: Address;
+  readonly oracleEvmAddress: Address;
+  readonly evmChainId: number;
+  readonly startBlock: bigint;
+  readonly confirmations: number;
+  readonly logBlockRange: bigint;
+  readonly maxFeePerGas: bigint;
+  readonly receiptAlertMs: number;
+  readonly feeBaseMultiplier: number;
+}
+
+export interface NearRelayerConfig extends CommonRelayerConfig {
+  readonly kind: "near";
+  readonly startId: number;
+  readonly pageSize: number;
+}
+
+export type RelayerConfig = EvmRelayerConfig | NearRelayerConfig;
+
+const NEAR_MAX_PAGE = 100;
 
 export class ConfigError extends Error {
   override readonly name = "ConfigError";
@@ -94,9 +111,32 @@ function maxFeeGwei(env: Env): bigint {
   return value;
 }
 
-export function loadConfig(env: Env): RelayerConfig {
+/**
+ * Base runs on the env names of the live deployment; other EVM sources use the EVM_* names.
+ * The first name that is set wins, so an Arbitrum env file never has to call its RPC "BASE".
+ */
+export function firstSet(env: Env, keys: readonly string[]): string {
+  const key = keys.find((k) => env[k]?.trim());
+  if (!key) throw new ConfigError(`${keys.join(" or ")} is required`);
+  return key;
+}
+
+export function sourceName(env: Env, key: string, fallback: SourceName): SourceName {
+  const raw = optional(env, key, fallback);
+  if (!isSourceName(raw)) throw new ConfigError(`${key} must be one of base, arbitrum, near, got "${raw}"`);
+  return raw;
+}
+
+function testnetAccount(env: Env, key: string): string {
+  const value = required(env, key);
+  if (!value.endsWith(".testnet")) throw new ConfigError(`${key} must be a testnet account`);
+  return value;
+}
+
+function common(env: Env, source: SourceName, chain: string): CommonRelayerConfig {
   return {
-    baseRpcUrl: serviceUrl(env, "BASE_RPC_URL"),
+    source,
+    chain,
     nearRpcUrl: serviceUrl(env, "NEAR_RPC_URL"),
     nearAiBaseUrl: serviceUrl(env, "NEAR_AI_BASE_URL", "https://cloud-api.near.ai"),
     nearAiApiKey: required(env, "NEAR_AI_API_KEY"),
@@ -104,24 +144,47 @@ export function loadConfig(env: Env): RelayerConfig {
     phalaApiKey: env.PHALA_API_KEY?.trim() || null,
     nearRelayerAccount: required(env, "NEAR_RELAYER_ACCOUNT"),
     nearRelayerKey: nearSecretKey(env, "NEAR_RELAYER_KEY"),
-    nearOracleContract: required(env, "NEAR_ORACLE_CONTRACT"),
-    aiOracleAddress: address(env, "AIORACLE_ADDRESS"),
-    oracleEvmAddress: address(env, "ORACLE_EVM_ADDRESS"),
-    baseChainId: positiveInt(env, "BASE_CHAIN_ID", 84532),
-    startBlock: nonNegativeBigInt(env, "START_BLOCK", "0"),
-    confirmations: positiveInt(env, "CONFIRMATIONS", 10),
+    nearOracleContract: source === "near" ? testnetAccount(env, "NEAR_ORACLE_CONTRACT") : required(env, "NEAR_ORACLE_CONTRACT"),
     pollMs: positiveInt(env, "POLL_MS", 5000),
-    logBlockRange: BigInt(positiveInt(env, "LOG_BLOCK_RANGE", 200)),
-    maxFeePerGas: maxFeeGwei(env),
     fulfillGasTera: positiveInt(env, "FULFILL_GAS_TGAS", 200),
     dailyModelBudget: positiveInt(env, "DAILY_MODEL_BUDGET", 300),
     perAddressHourlyLimit: positiveInt(env, "PER_ADDRESS_HOURLY_LIMIT", 5),
     modelRetries: positiveInt(env, "MODEL_RETRIES", 3),
     mpcRetries: positiveInt(env, "MPC_RETRIES", 3),
-    receiptAlertMs: positiveInt(env, "RECEIPT_ALERT_MS", 120000),
     stuckMs: positiveInt(env, "STUCK_MS", 1_800_000),
     maxQueue: positiveInt(env, "MAX_QUEUE", 50),
-    feeBaseMultiplier: positiveInt(env, "FEE_BASE_MULTIPLIER", 4),
-    dbPath: optional(env, "DB_PATH", "data/relayer.sqlite"),
+    dbPath: optional(env, "DB_PATH", source === "base" ? "data/relayer.sqlite" : `data/relayer-${source}.sqlite`),
   };
+}
+
+function loadEvmConfig(env: Env, source: SourceName): EvmRelayerConfig {
+  const chainKey = ["EVM_CHAIN_ID", "BASE_CHAIN_ID"].find((k) => env[k]?.trim());
+  const fallbackChainId = SOURCES[source].defaultChainId;
+  if (!chainKey && fallbackChainId === undefined) throw new ConfigError(`EVM_CHAIN_ID is required for SOURCE=${source}`);
+  const evmChainId = chainKey ? positiveInt(env, chainKey, 1) : (fallbackChainId as number);
+  return {
+    ...common(env, source, evmChainKey(evmChainId)),
+    kind: "evm",
+    evmRpcUrl: serviceUrl(env, firstSet(env, ["EVM_RPC_URL", "BASE_RPC_URL"])),
+    aiOracleAddress: address(env, "AIORACLE_ADDRESS"),
+    oracleEvmAddress: address(env, "ORACLE_EVM_ADDRESS"),
+    evmChainId,
+    startBlock: nonNegativeBigInt(env, "START_BLOCK", "0"),
+    confirmations: positiveInt(env, "CONFIRMATIONS", 10),
+    logBlockRange: BigInt(positiveInt(env, "LOG_BLOCK_RANGE", 200)),
+    maxFeePerGas: maxFeeGwei(env),
+    receiptAlertMs: positiveInt(env, "RECEIPT_ALERT_MS", 120000),
+    feeBaseMultiplier: positiveInt(env, "FEE_BASE_MULTIPLIER", 4),
+  };
+}
+
+function loadNearConfig(env: Env): NearRelayerConfig {
+  const pageSize = positiveInt(env, "NEAR_PAGE_SIZE", NEAR_MAX_PAGE);
+  if (pageSize > NEAR_MAX_PAGE) throw new ConfigError(`NEAR_PAGE_SIZE must be at most ${NEAR_MAX_PAGE}, the contract page limit`);
+  return { ...common(env, "near", NEAR_TESTNET_CHAIN), kind: "near", startId: positiveInt(env, "NEAR_START_ID", 1), pageSize };
+}
+
+export function loadConfig(env: Env): RelayerConfig {
+  const source = sourceName(env, "SOURCE", "base");
+  return SOURCES[source].kind === "near" ? loadNearConfig(env) : loadEvmConfig(env, source);
 }

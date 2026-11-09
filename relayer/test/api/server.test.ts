@@ -1,23 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ChainSnapshot, ChainStatus, Sample } from "../../src/api/chain.js";
 import type { ApiConfig } from "../../src/api/config.js";
 import { buildServer, rateLimitKey } from "../../src/api/server.js";
 import { ReadStore } from "../../src/api/store.js";
-import type { ModelInfo } from "../../src/types.js";
+import { FakeChain, storeMap } from "./fake-chain.js";
 import { apiConfig, buildFixture, MODELS, T0, type Fixture } from "./fixture.js";
-
-class FakeChain implements ChainStatus {
-  base: ChainSnapshot["base"] = { ok: true, value: { head: 300n, oracleBalanceWei: 15n * 10n ** 15n }, at: T0, stale: false };
-  near: ChainSnapshot["near"] = { ok: true, value: { relayerBalanceYocto: 4n * 10n ** 24n }, at: T0, stale: false };
-  modelList: Sample<readonly ModelInfo[]> = { ok: true, value: MODELS, at: T0, stale: false };
-  async snapshot(): Promise<ChainSnapshot> {
-    return { base: this.base, near: this.near };
-  }
-  async models(): Promise<Sample<readonly ModelInfo[]>> {
-    return this.modelList;
-  }
-}
 
 describe("API server", () => {
   let fx: Fixture;
@@ -28,7 +15,7 @@ describe("API server", () => {
   const log = { info: () => {}, warn: () => {}, error: (o: object, m: string) => logged.push(`${m} ${JSON.stringify(o)}`) };
 
   async function start(overrides: Partial<ApiConfig> = {}): Promise<FastifyInstance> {
-    app = await buildServer({ store, chain, config: apiConfig(fx.path, overrides), log, now: () => T0 + 3_600_000 });
+    app = await buildServer({ stores: storeMap([["base", store]]), chain, config: apiConfig(fx.path, overrides), log, now: () => T0 + 3_600_000 });
     return app;
   }
 
@@ -49,35 +36,49 @@ describe("API server", () => {
   it("GET /health reports queue, chain balances and budget", async () => {
     const res = await app.inject("/health");
     expect(res.statusCode).toBe(200);
+    const entry = {
+      source: "base",
+      chain: "eip155:84532",
+      name: "Base Sepolia",
+      scanned: "210",
+      head: "300",
+      lag: "90",
+      oracleAddress: apiConfig(fx.path).oracleEvmAddress,
+      oracleBalance: "15000000000000000",
+      stale: false,
+      checkedAt: new Date(T0).toISOString(),
+    };
     expect(res.json().data).toEqual({
       status: "ok",
       queue: { active: 1, byStatus: { answering: 1, confirmed: 2, rejected: 1 } },
-      base: { scannedBlock: "210", headBlock: "300", lagBlocks: "90", oracleAddress: apiConfig(fx.path).oracleEvmAddress, oracleBalanceWei: "15000000000000000", checkedAt: new Date(T0).toISOString(), stale: false },
+      sources: [entry],
+      base: { ...entry, scannedBlock: "210", headBlock: "300", lagBlocks: "90", oracleBalanceWei: "15000000000000000" },
       near: { contract: "oracle.psephex.testnet", relayerAccount: "relayer.psephex.testnet", relayerBalanceYocto: "4000000000000000000000000", checkedAt: new Date(T0).toISOString(), stale: false },
-      budget: { day: "2026-11-08", modelCalls: 7, dailyLimit: 300 },
+      budget: { day: "2026-11-08", modelCalls: 7, dailyLimit: 300, perSourceLimit: 300, bySource: { base: 7 } },
       errors: [],
     });
   });
 
   it("GET /health degrades instead of failing when an RPC is down", async () => {
-    chain.base = { ok: false, error: "Base RPC unavailable" };
+    chain.base = { ok: false, error: "Base Sepolia RPC unavailable" };
     const res = await app.inject("/health");
     expect(res.statusCode).toBe(200);
-    expect(res.json().data).toMatchObject({ status: "degraded", base: { headBlock: null, oracleBalanceWei: null, scannedBlock: "210" }, errors: ["Base RPC unavailable"] });
+    expect(res.json().data).toMatchObject({ status: "degraded", base: { headBlock: null, oracleBalanceWei: null, scannedBlock: "210" }, errors: ["Base Sepolia RPC unavailable"] });
   });
 
   it("GET /requests pages with a cursor and filters by status", async () => {
     const first = await app.inject("/requests?limit=2");
     expect(first.json().data.map((r: { id: number }) => r.id)).toEqual([4, 3]);
-    expect(first.json().meta).toEqual({ limit: 2, nextCursor: 3 });
-    const next = await app.inject("/requests?limit=2&cursor=3");
+    expect(first.json().meta).toMatchObject({ limit: 2, nextCursor: expect.any(String) });
+    const next = await app.inject(`/requests?limit=2&cursor=${first.json().meta.nextCursor as string}`);
     expect(next.json().data.map((r: { id: number }) => r.id)).toEqual([2, 1]);
+    expect(next.json().meta.nextCursor).toBeNull();
     const confirmed = await app.inject("/requests?status=confirmed");
     expect(confirmed.json().data.map((r: { id: number }) => r.id)).toEqual([3, 1]);
   });
 
   it("rejects bad query and path parameters with 400", async () => {
-    for (const url of ["/requests?limit=0", "/requests?limit=101", "/requests?cursor=abc", "/requests?status=pwned", "/requests?other=1", "/requests/abc", "/requests/0", "/requests/1e3", "/requests/-1/verify"]) {
+    for (const url of ["/requests?limit=0", "/requests?limit=101", "/requests?cursor=abc", "/requests?cursor=a.b", "/requests?source=solana", "/requests?source=near", "/requests/solana/1", "/requests/base/0", "/requests?status=pwned", "/requests?other=1", "/requests/abc", "/requests/0", "/requests/1e3", "/requests/-1/verify"]) {
       const res = await app.inject(url);
       expect(res.statusCode, url).toBe(400);
       expect(res.json().error.code, url).toBe("bad_request");
@@ -117,13 +118,14 @@ describe("API server", () => {
   });
 
   it("GET /stats counts requests and answers", async () => {
-    expect((await app.inject("/stats")).json().data).toEqual({
+    const totals = {
       total: 4,
       byStatus: { answering: 1, confirmed: 2, rejected: 1 },
       answers: { YES: 1, NO: 0, UNKNOWN: 1 },
       answerShare: { YES: 0.5, NO: 0, UNKNOWN: 0.5 },
       avgSecondsSeenToConfirmed: 51,
-    });
+    };
+    expect((await app.inject("/stats")).json().data).toEqual({ ...totals, bySource: { base: totals } });
   });
 
   it("allows CORS only for the dashboard origin", async () => {

@@ -1,9 +1,34 @@
 import { isIP } from "node:net";
 import type { Address } from "viem";
-import { address, ConfigError, optional, positiveInt, required, serviceUrl, type Env } from "../config.js";
+import { address, ConfigError, firstSet, optional, positiveInt, required, serviceUrl, type Env } from "../config.js";
+import { evmChainKey, isSourceName, NEAR_TESTNET_CHAIN, SOURCES, type SourceName } from "../sources.js";
+
+interface ApiSourceCommon {
+  readonly source: SourceName;
+  readonly chain: string;
+  readonly name: string;
+  readonly dbPath: string;
+  readonly explorer: string;
+}
+
+export interface ApiEvmSource extends ApiSourceCommon {
+  readonly kind: "evm";
+  readonly rpcUrl: string;
+  readonly publicRpcUrl: string;
+  readonly aiOracleAddress: Address;
+  readonly chainId: number;
+  readonly dispute: Address | null;
+}
+
+export interface ApiNearSource extends ApiSourceCommon {
+  readonly kind: "near";
+  readonly dispute: string | null;
+}
+
+export type ApiSource = ApiEvmSource | ApiNearSource;
 
 export interface ApiConfig {
-  readonly dbPath: string;
+  readonly sources: readonly ApiSource[];
   readonly host: string;
   readonly port: number;
   readonly publicUrl: string;
@@ -11,16 +36,12 @@ export interface ApiConfig {
   readonly rateLimitPerMinute: number;
   readonly trustProxy: false | string;
   readonly chainCacheMs: number;
-  readonly baseRpcUrl: string;
   readonly nearRpcUrl: string;
-  readonly publicBaseRpcUrl: string;
   readonly nearNetwork: "testnet";
   readonly nearAiBaseUrl: string;
-  readonly aiOracleAddress: Address;
-  readonly oracleEvmAddress: Address;
+  readonly oracleEvmAddress: Address | null;
   readonly nearOracleContract: string;
   readonly nearRelayerAccount: string;
-  readonly baseChainId: number;
   readonly dailyModelBudget: number;
 }
 
@@ -97,11 +118,72 @@ function trustProxy(env: Env): false | string {
   return ips.join(",");
 }
 
+function explorerUrl(env: Env, key: string, fallback: string): string {
+  const value = serviceUrl(env, key, fallback);
+  if (!value.startsWith("https://")) throw new ConfigError(`${key} must use https`);
+  return value;
+}
+
+function optionalAddress(env: Env, key: string): Address | null {
+  return env[key]?.trim() ? address(env, key) : null;
+}
+
+function sourceList(env: Env): SourceName[] {
+  const names = optional(env, "API_SOURCES", "base")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  for (const name of names) if (!isSourceName(name)) throw new ConfigError(`API_SOURCES lists unknown source "${name}"; use base, arbitrum, near`);
+  if (names.length === 0) throw new ConfigError("API_SOURCES must list at least one source");
+  if (new Set(names).size !== names.length) throw new ConfigError("API_SOURCES lists a source twice");
+  return names as SourceName[];
+}
+
+/**
+ * Base keeps the env names of the live single-source deployment (DB_PATH, BASE_RPC_URL,
+ * AIORACLE_ADDRESS); every other source reads the same settings under its own prefix.
+ */
+function evmSource(env: Env, source: SourceName): ApiEvmSource {
+  const prefix = source.toUpperCase();
+  const legacy = source === "base";
+  const info = SOURCES[source];
+  const chainId = positiveInt(env, `${prefix}_CHAIN_ID`, info.defaultChainId ?? 0);
+  return {
+    source,
+    kind: "evm",
+    chain: evmChainKey(chainId),
+    name: info.name,
+    dbPath: required(env, firstSet(env, legacy ? [`${prefix}_DB_PATH`, "DB_PATH"] : [`${prefix}_DB_PATH`])),
+    explorer: explorerUrl(env, `${prefix}_EXPLORER_URL`, info.explorer),
+    rpcUrl: serviceUrl(env, `${prefix}_RPC_URL`),
+    publicRpcUrl: serviceUrl(env, `PUBLIC_${prefix}_RPC_URL`, info.publicRpcUrl ?? ""),
+    aiOracleAddress: address(env, firstSet(env, legacy ? [`${prefix}_AIORACLE_ADDRESS`, "AIORACLE_ADDRESS"] : [`${prefix}_AIORACLE_ADDRESS`])),
+    chainId,
+    dispute: optionalAddress(env, `${prefix}_DISPUTE_ADDRESS`),
+  };
+}
+
+function nearSource(env: Env): ApiNearSource {
+  const info = SOURCES.near;
+  return {
+    source: "near",
+    kind: "near",
+    chain: NEAR_TESTNET_CHAIN,
+    name: info.name,
+    dbPath: required(env, "NEAR_DB_PATH"),
+    explorer: explorerUrl(env, "NEAR_EXPLORER_URL", info.explorer),
+    dispute: env.NEAR_DISPUTE_CONTRACT?.trim() ? nearAccount(env, "NEAR_DISPUTE_CONTRACT") : null,
+  };
+}
+
 export function loadApiConfig(env: Env): ApiConfig {
   assertNoRelayerSecrets(env);
   const listenPort = port(env);
+  const sources = sourceList(env).map((s) => (SOURCES[s].kind === "near" ? nearSource(env) : evmSource(env, s)));
+  if (new Set(sources.map((s) => s.dbPath)).size !== sources.length) throw new ConfigError("each source needs its own database path");
+  const anyEvm = sources.some((s) => s.kind === "evm");
   return {
-    dbPath: required(env, "DB_PATH"),
+    sources,
     host: optional(env, "API_HOST", "127.0.0.1"),
     port: listenPort,
     publicUrl: publicUrl(env, listenPort),
@@ -109,16 +191,12 @@ export function loadApiConfig(env: Env): ApiConfig {
     rateLimitPerMinute: positiveInt(env, "API_RATE_LIMIT", 120),
     trustProxy: trustProxy(env),
     chainCacheMs: positiveInt(env, "API_CHAIN_CACHE_MS", 15_000),
-    baseRpcUrl: serviceUrl(env, "BASE_RPC_URL"),
     nearRpcUrl: serviceUrl(env, "NEAR_RPC_URL"),
-    publicBaseRpcUrl: serviceUrl(env, "PUBLIC_BASE_RPC_URL", "https://sepolia.base.org"),
     nearNetwork: "testnet",
     nearAiBaseUrl: serviceUrl(env, "NEAR_AI_BASE_URL", "https://cloud-api.near.ai"),
-    aiOracleAddress: address(env, "AIORACLE_ADDRESS"),
-    oracleEvmAddress: address(env, "ORACLE_EVM_ADDRESS"),
+    oracleEvmAddress: anyEvm ? address(env, "ORACLE_EVM_ADDRESS") : null,
     nearOracleContract: nearAccount(env, "NEAR_ORACLE_CONTRACT"),
     nearRelayerAccount: nearAccount(env, "NEAR_RELAYER_ACCOUNT"),
-    baseChainId: positiveInt(env, "BASE_CHAIN_ID", 84532),
     dailyModelBudget: positiveInt(env, "DAILY_MODEL_BUDGET", 300),
   };
 }

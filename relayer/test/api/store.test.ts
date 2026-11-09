@@ -19,17 +19,23 @@ describe("ReadStore", () => {
     fx.cleanup();
   });
 
-  it("pages requests newest first with a keyset cursor", () => {
-    const first = store.listRequests({ limit: 3 });
-    expect(first.items.map((r) => r.id)).toEqual([4, 3, 2]);
-    expect(first.nextCursor).toBe(2);
-    const second = store.listRequests({ limit: 3, before: 2 });
-    expect(second.items.map((r) => r.id)).toEqual([1]);
-    expect(second.nextCursor).toBeNull();
+  it("pages requests newest first below an exclusive (createdAt, id) bound", () => {
+    expect(store.listRequests({ limit: 3 }).map((r) => r.id)).toEqual([4, 3, 2]);
+    const t = store.request(2)?.createdAt ?? 0;
+    expect(store.listRequests({ limit: 3, before: { createdAt: t, id: 2 } }).map((r) => r.id)).toEqual([1]);
+    expect(store.listRequests({ limit: 3, before: { createdAt: t, id: Number.MAX_SAFE_INTEGER } }).map((r) => r.id)).toEqual([4, 3, 2]);
+    expect(store.listRequests({ limit: 3, before: { createdAt: t, id: 0 } })).toEqual([]);
   });
 
   it("filters by status", () => {
-    expect(store.listRequests({ limit: 10, status: "confirmed" }).items.map((r) => r.id)).toEqual([3, 1]);
+    expect(store.listRequests({ limit: 10, status: "confirmed" }).map((r) => r.id)).toEqual([3, 1]);
+  });
+
+  it("refuses a database tagged with another source cursor", () => {
+    expect(() => ReadStore.open(fx.nearPath)).toThrow(/cursor of near, not base/);
+    const near = ReadStore.open(fx.nearPath, "near");
+    expect(near.cursor()).toBe(2n);
+    near.close();
   });
 
   it("returns everything stored for one request", () => {

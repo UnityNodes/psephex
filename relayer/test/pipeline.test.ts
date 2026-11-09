@@ -1,24 +1,29 @@
 import { generatePrivateKey } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type Repository } from "../src/db.js";
-import { Processor, type ProcessorSettings } from "../src/pipeline.js";
+import { Processor, type EvmSettings, type ProcessorSettings } from "../src/pipeline.js";
 import { byProvider } from "../src/providers.js";
 import { AIORACLE, askedEvent, CHAIN_ID, FakeBase, FakeModels, FakeNear, ManualClock, ORACLE_ADDRESS, silentLog } from "./fakes.js";
 
 const SETTINGS: ProcessorSettings = {
-  aiOracleAddress: AIORACLE,
-  oracleEvmAddress: ORACLE_ADDRESS,
-  baseChainId: CHAIN_ID,
-  maxFeePerGas: 2_000_000_000n,
+  chain: `eip155:${CHAIN_ID}`,
+  chainLabel: "Base",
   dailyModelBudget: 100,
   perAddressHourlyLimit: 5,
   modelRetries: 3,
   mpcRetries: 3,
-  receiptAlertMs: 120_000,
-  confirmations: 2,
   maxQuestionBytes: 2000,
   stuckMs: 1_800_000,
   maxQueue: 50,
+};
+
+const EVM: EvmSettings = {
+  aiOracleAddress: AIORACLE,
+  oracleEvmAddress: ORACLE_ADDRESS,
+  evmChainId: CHAIN_ID,
+  maxFeePerGas: 2_000_000_000n,
+  receiptAlertMs: 120_000,
+  confirmations: 2,
   evmGasLimit: 300_000n,
   feeBaseMultiplier: 4,
 };
@@ -31,8 +36,9 @@ describe("Processor", () => {
   let base: FakeBase;
   let clock: ManualClock;
 
-  function processor(settings: Partial<ProcessorSettings> = {}): Processor {
-    return new Processor({ repo, near, models: byProvider({ "near-ai": models, phala: phalaModels }), base, clock, log: silentLog, settings: { ...SETTINGS, ...settings } });
+  function processor(settings: Partial<ProcessorSettings & EvmSettings> = {}): Processor {
+    const target = { kind: "evm" as const, base, settings: { ...EVM, ...settings } };
+    return new Processor({ repo, near, models: byProvider({ "near-ai": models, phala: phalaModels }), target, clock, log: silentLog, settings: { ...SETTINGS, ...settings } });
   }
 
   async function settle(p: Processor, id: number, rounds = 20): Promise<{ status: string; waiting: boolean }> {
@@ -396,7 +402,7 @@ describe("Processor", () => {
       repo.recordAsked([askedEvent(1n)], 200n);
       const warnings: { obj: object; msg: string }[] = [];
       const log = { ...silentLog, warn: (obj: object, msg: string) => warnings.push({ obj, msg }) };
-      const result = await new Processor({ repo, near, models: byProvider({ "near-ai": models }), base, clock, log, settings: SETTINGS }).run(1);
+      const result = await new Processor({ repo, near, models: byProvider({ "near-ai": models }), target: { kind: "evm", base, settings: EVM }, clock, log, settings: SETTINGS }).run(1);
       expect(result).toMatchObject({ status: "answering", waiting: true });
       expect(warnings.at(-1)).toMatchObject({ msg: "no model client configured for provider unknown-cloud", obj: { model: "x/m-c", alert: true } });
     });

@@ -1,29 +1,39 @@
 import type { Address } from "viem";
+import type { SourceName } from "../sources.js";
 import type { ModelInfo } from "../types.js";
+import type { ApiSource } from "./config.js";
 
 export type Sample<T> =
   | { readonly ok: true; readonly value: T; readonly at: number; readonly stale: boolean }
   | { readonly ok: false; readonly error: string };
 
 export interface ChainReader {
-  baseHead(): Promise<bigint>;
-  baseBalance(address: Address): Promise<bigint>;
+  head(source: SourceName): Promise<bigint>;
+  evmBalance(source: SourceName, address: Address): Promise<bigint>;
   nearBalance(accountId: string): Promise<bigint>;
+  nearFee(): Promise<bigint>;
   models(): Promise<ModelInfo[]>;
 }
 
+export interface SourceHead {
+  readonly head: bigint;
+  readonly oracleBalanceWei: bigint | null;
+}
+
 export interface ChainSnapshot {
-  readonly base: Sample<{ readonly head: bigint; readonly oracleBalanceWei: bigint }>;
+  readonly sources: Readonly<Partial<Record<SourceName, Sample<SourceHead>>>>;
   readonly near: Sample<{ readonly relayerBalanceYocto: bigint }>;
 }
 
 export interface ChainStatus {
   snapshot(): Promise<ChainSnapshot>;
   models(): Promise<Sample<readonly ModelInfo[]>>;
+  nearFee(): Promise<Sample<bigint>>;
 }
 
 export interface ChainStatusSettings {
-  readonly oracleEvmAddress: Address;
+  readonly sources: readonly Pick<ApiSource, "source" | "kind" | "name">[];
+  readonly oracleEvmAddress: Address | null;
   readonly nearRelayerAccount: string;
 }
 
@@ -75,22 +85,24 @@ export function cachedSource<T>(opts: CachedSourceOptions<T>): () => Promise<Sam
 export function createChainStatus(reader: ChainReader, settings: ChainStatusSettings, ttlMs: number, now: () => number, onError?: (source: string, err: unknown) => void): ChainStatus {
   const report = (source: string) => (err: unknown) => onError?.(source, err);
   const common = { ttlMs, now, retryAfterMs: FAILURE_RETRY_MS };
-  const base = cachedSource({
-    ...common,
-    label: "Base RPC",
-    onError: report("base"),
-    load: async () => {
-      const [head, oracleBalanceWei] = await Promise.all([reader.baseHead(), reader.baseBalance(settings.oracleEvmAddress)]);
+  const oracle = settings.oracleEvmAddress;
+  const heads = settings.sources.map((s) => {
+    const load = async (): Promise<SourceHead> => {
+      const balance = s.kind === "evm" && oracle !== null ? reader.evmBalance(s.source, oracle) : Promise.resolve(null);
+      const [head, oracleBalanceWei] = await Promise.all([reader.head(s.source), balance]);
       return { head, oracleBalanceWei };
-    },
+    };
+    return [s.source, cachedSource({ ...common, label: `${s.name} RPC`, onError: report(s.source), load })] as const;
   });
-  const near = cachedSource({ ...common, label: "NEAR RPC", onError: report("near"), load: async () => ({ relayerBalanceYocto: await reader.nearBalance(settings.nearRelayerAccount) }) });
+  const near = cachedSource({ ...common, label: "NEAR RPC", onError: report("near-account"), load: async () => ({ relayerBalanceYocto: await reader.nearBalance(settings.nearRelayerAccount) }) });
   const models = cachedSource({ ...common, label: "NEAR RPC", onError: report("models"), load: async (): Promise<readonly ModelInfo[]> => reader.models() });
+  const nearFee = cachedSource({ ...common, label: "NEAR RPC", onError: report("near-fee"), load: () => reader.nearFee() });
   return {
     async snapshot() {
-      const [b, n] = await Promise.all([base(), near()]);
-      return { base: b, near: n };
+      const [entries, n] = await Promise.all([Promise.all(heads.map(async ([source, get]) => [source, await get()] as const)), near()]);
+      return { sources: Object.fromEntries(entries), near: n };
     },
     models,
+    nearFee,
   };
 }

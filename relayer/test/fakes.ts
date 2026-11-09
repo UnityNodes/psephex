@@ -14,7 +14,10 @@ import type {
   ModelProviderPort,
   ModelReply,
   ModelSignature,
+  NearFulfillArgs,
   NearOraclePort,
+  NearRequestInfo,
+  NearRequestsPort,
   NearTxOutcome,
   OnSignedResult,
   SignedNearTx,
@@ -25,6 +28,23 @@ export const ORACLE_ADDRESS = privateKeyToAccount(ORACLE_KEY).address;
 export const AIORACLE: Address = "0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111";
 export const DISPUTE: Address = "0xCa744C595A6C2EE470257D2B873aEd2b1a78E092";
 export const CHAIN_ID = 84532;
+export const ARBITRUM_CHAIN_ID = 421614;
+export const NEAR_CHAIN = "near:testnet";
+export const ASKER = "alice.testnet";
+
+export function nearRequest(id: number, question = `NEAR question ${id}?`, overrides: Partial<NearRequestInfo> = {}): NearRequestInfo {
+  return {
+    chain: NEAR_CHAIN,
+    requestId: id,
+    asker: ASKER,
+    question,
+    questionHash: keccak256(new TextEncoder().encode(question)),
+    paidYocto: "10000000000000000000000",
+    answer: null,
+    votes: [],
+    ...overrides,
+  };
+}
 
 const ANSWER_CODES: Readonly<Record<string, number>> = { UNKNOWN: 0, YES: 1, NO: 2 };
 
@@ -53,9 +73,15 @@ async function mpcSign(unsigned: Hex, key: Hex): Promise<OnSignedResult> {
   };
 }
 
-export type SendBehavior = "ok" | "mpc_fail" | "panic" | "panic_cap" | "panic_progress" | "network_error" | "pending" | "invalid";
+export type SendBehavior = "ok" | "mpc_fail" | "panic" | "panic_cap" | "panic_progress" | "network_error" | "pending" | "invalid" | "callback_fail" | "rival";
 
-export class FakeNear implements NearOraclePort {
+export class FakeNear implements NearOraclePort, NearRequestsPort {
+  chainId = CHAIN_ID;
+  signedChain: string | undefined;
+  requests = new Map<number, NearRequestInfo>();
+  nearSignCalls: NearFulfillArgs[] = [];
+  pageCalls: [number, number][] = [];
+  readonly #nearArgs = new Map<string, NearFulfillArgs>();
   modelList: ModelInfo[] = [
     { model: "m-a", provider: "near-ai", scheme: "nearai-v1", publicKey: "aa" },
     { model: "m-b", provider: "near-ai", scheme: "nearai-v1", publicKey: "bb" },
@@ -103,7 +129,51 @@ export class FakeNear implements NearOraclePort {
     return { txHash, signedTxBase64: Buffer.from(txHash).toString("base64") };
   }
 
+  async signFulfillNear(args: NearFulfillArgs): Promise<SignedNearTx> {
+    this.nearSignCalls.push(args);
+    const txHash = `NEARFULFILL${this.nearSignCalls.length}`;
+    this.#nearArgs.set(txHash, args);
+    return { txHash, signedTxBase64: Buffer.from(txHash).toString("base64") };
+  }
+
+  async nearRequest(requestId: number): Promise<NearRequestInfo | null> {
+    return this.requests.get(requestId) ?? null;
+  }
+
+  async nearRequests(fromId: number, limit: number): Promise<NearRequestInfo[]> {
+    this.pageCalls.push([fromId, limit]);
+    return [...this.requests.values()].filter((r) => r.requestId >= fromId && r.requestId < fromId + limit).sort((a, b) => a.requestId - b.requestId);
+  }
+
+  async lastNearRequestId(): Promise<number> {
+    return Math.max(0, ...this.requests.keys());
+  }
+
+  #answerOnNear(id: number, answer: string): void {
+    const r = this.requests.get(id);
+    if (r) this.requests.set(id, { ...r, answer, votes: this.consensus.votes });
+    this.fulfilled.add(id);
+  }
+
+  #settleNear(hash: string, args: NearFulfillArgs): NearTxOutcome {
+    const behavior = this.sendPlan.shift() ?? "ok";
+    if (behavior === "network_error") throw new Error("fetch failed");
+    if (behavior === "pending") return { kind: "unknown" };
+    if (behavior === "invalid") return { kind: "invalid", error: "InvalidTxError: Expired" };
+    if (behavior === "rival") {
+      this.#answerOnNear(args.request_id, this.signedAnswer ?? this.consensus.answer);
+      return this.#store(hash, { kind: "failure", error: this.panicMessage });
+    }
+    if (behavior === "panic") return this.#store(hash, { kind: "failure", error: this.panicMessage });
+    const answer = this.signedAnswer ?? this.consensus.answer;
+    this.#answerOnNear(args.request_id, answer);
+    if (behavior === "callback_fail") return this.#store(hash, { kind: "success", result: { ok: true, delivered: false } });
+    return this.#store(hash, { kind: "success", result: { ok: true, chain: NEAR_CHAIN, request_id: args.request_id, answer } });
+  }
+
   async #settle(hash: string): Promise<NearTxOutcome> {
+    const nearArgs = this.#nearArgs.get(hash);
+    if (nearArgs) return this.#settleNear(hash, nearArgs);
     const behavior = this.sendPlan.shift() ?? "ok";
     const args = this.#args.get(hash);
     if (!args) throw new Error(`unknown near tx ${hash}`);
@@ -116,7 +186,7 @@ export class FakeNear implements NearOraclePort {
     if (behavior === "mpc_fail") return this.#store(hash, { kind: "success", result: { ok: false, error: "sign failed" } });
     const unsigned = serializeTransaction({
       type: "eip1559",
-      chainId: CHAIN_ID,
+      chainId: this.chainId,
       nonce: args.nonce,
       maxFeePerGas: BigInt(args.max_fee_per_gas),
       maxPriorityFeePerGas: BigInt(args.max_priority_fee_per_gas),
@@ -130,7 +200,8 @@ export class FakeNear implements NearOraclePort {
       }),
     });
     this.fulfilled.add(args.request_id);
-    return this.#store(hash, { kind: "success", result: { ...(await mpcSign(unsigned, this.signingKey)), request_id: args.request_id } });
+    const chain = this.signedChain === undefined ? {} : { chain: this.signedChain };
+    return this.#store(hash, { kind: "success", result: { ...(await mpcSign(unsigned, this.signingKey)), ...chain, request_id: args.request_id } });
   }
 
   #store(hash: string, outcome: NearTxOutcome): NearTxOutcome {

@@ -2,14 +2,16 @@ import { isIP } from "node:net";
 import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import type { Log } from "../pipeline.js";
+import { SOURCE_NAMES, type SourceName } from "../sources.js";
 import { REQUEST_STATUSES, TERMINAL_STATUSES, type RequestStatus } from "../types.js";
 import type { ChainStatus, Sample } from "./chain.js";
-import type { ApiConfig } from "./config.js";
+import type { ApiConfig, ApiSource } from "./config.js";
+import { decodeCursor, listMerged, type SourceStore } from "./listing.js";
 import type { ReadStore } from "./store.js";
-import { modelsView, requestDetail, requestSummary, verifyPlan, type RequestBundle } from "./views.js";
+import { chainsView, modelsView, requestDetail, requestSummary, verifyPlan, type RequestBundle } from "./views.js";
 
 export interface ApiDeps {
-  readonly store: ReadStore;
+  readonly stores: ReadonlyMap<SourceName, ReadStore>;
   readonly chain: ChainStatus;
   readonly config: ApiConfig;
   readonly log: Log;
@@ -18,6 +20,8 @@ export interface ApiDeps {
 
 const ID_PATTERN = "^[1-9][0-9]{0,14}$";
 const LIMIT_PATTERN = "^([1-9]|[1-9][0-9]|100)$";
+const CURSOR_PATTERN = "^[A-Za-z0-9_-]{1,200}$";
+const LEGACY_SOURCE: SourceName = "base";
 const DEFAULT_LIMIT = 20;
 const BODY_LIMIT_BYTES = 1024;
 const CONNECTION_TIMEOUT_MS = 10_000;
@@ -41,13 +45,21 @@ const idParams = {
   properties: { id: { type: "string", pattern: ID_PATTERN } },
 } as const;
 
+const sourceIdParams = {
+  type: "object",
+  required: ["source", "id"],
+  additionalProperties: false,
+  properties: { source: { type: "string", enum: SOURCE_NAMES }, id: { type: "string", pattern: ID_PATTERN } },
+} as const;
+
 const listQuery = {
   type: "object",
   additionalProperties: false,
   properties: {
     limit: { type: "string", pattern: LIMIT_PATTERN },
-    cursor: { type: "string", pattern: ID_PATTERN },
+    cursor: { type: "string", pattern: CURSOR_PATTERN },
     status: { type: "string", enum: REQUEST_STATUSES },
+    source: { type: "string", enum: SOURCE_NAMES },
   },
 } as const;
 
@@ -55,7 +67,10 @@ interface ListQueryString {
   readonly limit?: string;
   readonly cursor?: string;
   readonly status?: RequestStatus;
+  readonly source?: SourceName;
 }
+
+type ByStatus = Record<string, number>;
 
 class HttpError extends Error {
   constructor(
@@ -90,9 +105,27 @@ function errorBody(code: string, message: string) {
   return { error: { code, message } };
 }
 
-function bundle(store: ReadStore, id: number): RequestBundle {
+interface Served {
+  readonly source: ApiSource;
+  readonly store: ReadStore;
+}
+
+function served(deps: ApiDeps): Served[] {
+  return deps.config.sources.flatMap((source) => {
+    const store = deps.stores.get(source.source);
+    return store ? [{ source, store }] : [];
+  });
+}
+
+function find(deps: ApiDeps, name: SourceName): Served {
+  const hit = served(deps).find((s) => s.source.source === name);
+  if (!hit) throw new HttpError(404, "not_found", `source ${name} is not served`);
+  return hit;
+}
+
+function bundle({ store, source }: Served, id: number): RequestBundle {
   const request = store.request(id);
-  if (!request) throw new HttpError(404, "not_found", `request ${id} not found`);
+  if (!request) throw new HttpError(404, "not_found", source.source === LEGACY_SOURCE ? `request ${id} not found` : `request ${source.source}/${id} not found`);
   return { request, answers: store.modelAnswers(id), nearTxs: store.nearTxs(id), baseTxs: store.baseTxs(id) };
 }
 
@@ -100,29 +133,49 @@ function share(count: number, total: number): number {
   return total === 0 ? 0 : count / total;
 }
 
-async function health(deps: ApiDeps) {
-  const { store, chain, config, now } = deps;
-  const snap = await chain.snapshot();
-  const byStatus = store.statusCounts();
-  const active = Object.entries(byStatus)
+function addCounts(into: ByStatus, from: ByStatus): ByStatus {
+  return Object.fromEntries([...new Set([...Object.keys(into), ...Object.keys(from)])].sort().map((k) => [k, (into[k] ?? 0) + (from[k] ?? 0)]));
+}
+
+function activeCount(byStatus: ByStatus): number {
+  return Object.entries(byStatus)
     .filter(([status]) => !TERMINAL_STATUSES.includes(status as RequestStatus))
     .reduce((sum, [, n]) => sum + n, 0);
+}
+
+function sourceHealth(src: ApiSource, store: ReadStore, sample: Sample<{ head: bigint; oracleBalanceWei: bigint | null }> | undefined, oracleAddress: string | null) {
   const scanned = store.cursor();
-  const head = snap.base.ok ? snap.base.value.head : null;
+  const head = sample?.ok ? sample.value.head : null;
+  const evm = src.kind === "evm" ? { oracleAddress, oracleBalance: sample?.ok && sample.value.oracleBalanceWei !== null ? sample.value.oracleBalanceWei.toString() : null } : {};
+  return {
+    source: src.source,
+    chain: src.chain,
+    name: src.name,
+    scanned: scanned?.toString() ?? null,
+    head: head?.toString() ?? null,
+    lag: head !== null && scanned !== null ? (head - scanned).toString() : null,
+    ...evm,
+    stale: sample?.ok ? sample.stale : null,
+    checkedAt: sample ? iso(sample) : null,
+  };
+}
+
+async function health(deps: ApiDeps) {
+  const { chain, config, now } = deps;
+  const snap = await chain.snapshot();
+  const list = served(deps);
+  const byStatus = list.reduce<ByStatus>((acc, s) => addCounts(acc, s.store.statusCounts()), {});
+  const sources = list.map((s) => sourceHealth(s.source, s.store, snap.sources[s.source.source], config.oracleEvmAddress));
+  const base = sources.find((s) => s.source === LEGACY_SOURCE);
   const day = new Date(now()).toISOString().slice(0, 10);
-  const errors = [snap.base, snap.near].flatMap((s) => (s.ok ? [] : [s.error]));
+  const calls = Object.fromEntries(list.map((s) => [s.source.source, s.store.modelCallsOn(day)]));
+  const samples = [...list.map((s) => snap.sources[s.source.source]), snap.near];
+  const errors = samples.flatMap((s) => (s && !s.ok ? [s.error] : []));
   return {
     status: errors.length === 0 ? "ok" : "degraded",
-    queue: { active, byStatus },
-    base: {
-      scannedBlock: scanned?.toString() ?? null,
-      headBlock: head?.toString() ?? null,
-      lagBlocks: head !== null && scanned !== null ? (head - scanned).toString() : null,
-      oracleAddress: config.oracleEvmAddress,
-      oracleBalanceWei: snap.base.ok ? snap.base.value.oracleBalanceWei.toString() : null,
-      checkedAt: iso(snap.base),
-      stale: snap.base.ok ? snap.base.stale : null,
-    },
+    queue: { active: activeCount(byStatus), byStatus },
+    sources,
+    base: base ? { ...base, scannedBlock: base.scanned, headBlock: base.head, lagBlocks: base.lag, oracleBalanceWei: base.oracleBalance ?? null } : null,
     near: {
       contract: config.nearOracleContract,
       relayerAccount: config.nearRelayerAccount,
@@ -130,24 +183,55 @@ async function health(deps: ApiDeps) {
       checkedAt: iso(snap.near),
       stale: snap.near.ok ? snap.near.stale : null,
     },
-    budget: { day, modelCalls: store.modelCallsOn(day), dailyLimit: config.dailyModelBudget },
+    budget: {
+      day,
+      modelCalls: Object.values(calls).reduce((sum, n) => sum + n, 0),
+      dailyLimit: config.dailyModelBudget * list.length,
+      perSourceLimit: config.dailyModelBudget,
+      bySource: calls,
+    },
     errors,
   };
 }
 
-function stats(store: ReadStore) {
+interface StatParts {
+  readonly byStatus: ByStatus;
+  readonly answers: ByStatus;
+  readonly confirmed: number;
+  readonly avgMs: number | null;
+}
+
+function statParts(store: ReadStore): StatParts {
   const byStatus = store.statusCounts();
-  const counted = store.answerCounts();
-  const answers = Object.fromEntries(ANSWERS.map((a) => [a, counted[a] ?? 0])) as Record<(typeof ANSWERS)[number], number>;
+  return { byStatus, answers: store.answerCounts(), confirmed: byStatus.confirmed ?? 0, avgMs: store.avgConfirmMs() };
+}
+
+function statsView(p: StatParts) {
+  const answers = Object.fromEntries(ANSWERS.map((a) => [a, p.answers[a] ?? 0])) as Record<(typeof ANSWERS)[number], number>;
   const answered = ANSWERS.reduce((sum, a) => sum + answers[a], 0);
-  const avgMs = store.avgConfirmMs();
   return {
-    total: Object.values(byStatus).reduce((sum, n) => sum + n, 0),
-    byStatus,
+    total: Object.values(p.byStatus).reduce((sum, n) => sum + n, 0),
+    byStatus: p.byStatus,
     answers,
     answerShare: Object.fromEntries(ANSWERS.map((a) => [a, share(answers[a], answered)])),
-    avgSecondsSeenToConfirmed: avgMs === null ? null : Math.round(avgMs / 1000),
+    avgSecondsSeenToConfirmed: p.avgMs === null ? null : Math.round(p.avgMs / 1000),
   };
+}
+
+function combine(parts: readonly StatParts[]): StatParts {
+  const confirmed = parts.reduce((sum, p) => sum + p.confirmed, 0);
+  const weighted = parts.reduce((sum, p) => sum + (p.avgMs ?? 0) * p.confirmed, 0);
+  return {
+    byStatus: parts.reduce<ByStatus>((acc, p) => addCounts(acc, p.byStatus), {}),
+    answers: parts.reduce<ByStatus>((acc, p) => addCounts(acc, p.answers), {}),
+    confirmed,
+    avgMs: confirmed === 0 ? null : weighted / confirmed,
+  };
+}
+
+function stats(deps: ApiDeps) {
+  const parts = served(deps).map((s) => [s.source.source, statParts(s.store)] as const);
+  return { ...statsView(combine(parts.map(([, p]) => p))), bySource: Object.fromEntries(parts.map(([source, p]) => [source, statsView(p)])) };
 }
 
 function registerSafety(app: FastifyInstance, deps: ApiDeps): void {
@@ -168,31 +252,50 @@ function registerSafety(app: FastifyInstance, deps: ApiDeps): void {
   });
 }
 
+function listRequests(deps: ApiDeps, q: ListQueryString) {
+  const limit = q.limit === undefined ? DEFAULT_LIMIT : Number(q.limit);
+  const cursor = q.cursor === undefined ? undefined : decodeCursor(q.cursor);
+  if (cursor === null) throw new HttpError(400, "bad_request", "cursor is not one this API issued");
+  const all = served(deps);
+  const picked = q.source === undefined ? all : all.filter((s) => s.source.source === q.source);
+  if (picked.length === 0) throw new HttpError(400, "bad_request", `source ${q.source ?? ""} is not served`);
+  const stores: SourceStore[] = picked.map((s) => ({ source: s.source.source, store: s.store }));
+  const page = listMerged(stores, { limit, ...(q.status === undefined ? {} : { status: q.status }), ...(cursor === undefined ? {} : { cursor }) });
+  const bySource = new Map(all.map((s) => [s.source.source, s.source]));
+  const data = page.items.map((item) => requestSummary(item.row, bySource.get(item.source) as ApiSource));
+  return { data, meta: { limit, nextCursor: page.nextCursor } };
+}
+
+async function detail(deps: ApiDeps, target: Served, id: number) {
+  const b = bundle(target, id);
+  const models = await deps.chain.models();
+  return { data: requestDetail({ ...b, models: models.ok ? models.value : null, source: target.source }) };
+}
+
+async function verify(deps: ApiDeps, target: Served, id: number) {
+  const b = bundle(target, id);
+  const models = await deps.chain.models();
+  return { data: verifyPlan(b, deps.config, target.source, models.ok ? models.value.map((m) => m.model) : null) };
+}
+
+type SourceIdRequest = FastifyRequest<{ Params: { source: SourceName; id: string } }>;
+type IdRequest = FastifyRequest<{ Params: { id: string } }>;
+
 function registerRoutes(app: FastifyInstance, deps: ApiDeps): void {
-  const { store, chain, config } = deps;
+  const { chain, config } = deps;
   app.get("/health", async () => ({ data: await health(deps) }));
 
-  app.get<{ Querystring: ListQueryString }>("/requests", { schema: { querystring: listQuery } }, async (req) => {
-    const limit = req.query.limit === undefined ? DEFAULT_LIMIT : Number(req.query.limit);
-    const page = store.listRequests({
-      limit,
-      ...(req.query.cursor === undefined ? {} : { before: Number(req.query.cursor) }),
-      ...(req.query.status === undefined ? {} : { status: req.query.status }),
-    });
-    return { data: page.items.map(requestSummary), meta: { limit, nextCursor: page.nextCursor } };
+  app.get("/chains", async () => {
+    const fee = config.sources.some((s) => s.kind === "near") ? await chain.nearFee() : null;
+    return { data: chainsView(config.sources, config, fee?.ok ? fee.value : null), ...(fee ? { meta: { checkedAt: iso(fee), stale: fee.ok ? fee.stale : null } } : {}) };
   });
 
-  app.get<{ Params: { id: string } }>("/requests/:id", { schema: { params: idParams } }, async (req) => {
-    const b = bundle(store, Number(req.params.id));
-    const models = await chain.models();
-    return { data: requestDetail({ ...b, models: models.ok ? models.value : null }) };
-  });
+  app.get<{ Querystring: ListQueryString }>("/requests", { schema: { querystring: listQuery } }, async (req) => listRequests(deps, req.query));
 
-  app.get<{ Params: { id: string } }>("/requests/:id/verify", { schema: { params: idParams } }, async (req) => {
-    const b = bundle(store, Number(req.params.id));
-    const models = await chain.models();
-    return { data: verifyPlan(b, config, models.ok ? models.value.map((m) => m.model) : null) };
-  });
+  app.get("/requests/:source/:id", { schema: { params: sourceIdParams } }, async (req: SourceIdRequest) => detail(deps, find(deps, req.params.source), Number(req.params.id)));
+  app.get("/requests/:source/:id/verify", { schema: { params: sourceIdParams } }, async (req: SourceIdRequest) => verify(deps, find(deps, req.params.source), Number(req.params.id)));
+  app.get("/requests/:id", { schema: { params: idParams } }, async (req: IdRequest) => detail(deps, find(deps, LEGACY_SOURCE), Number(req.params.id)));
+  app.get("/requests/:id/verify", { schema: { params: idParams } }, async (req: IdRequest) => verify(deps, find(deps, LEGACY_SOURCE), Number(req.params.id)));
 
   app.get("/models", async () => {
     const models = await chain.models();
@@ -200,7 +303,7 @@ function registerRoutes(app: FastifyInstance, deps: ApiDeps): void {
     return { data: modelsView(models.value, config), meta: { checkedAt: iso(models), stale: models.stale } };
   });
 
-  app.get("/stats", async () => ({ data: stats(store) }));
+  app.get("/stats", async () => ({ data: stats(deps) }));
 }
 
 export async function buildServer(deps: ApiDeps): Promise<FastifyInstance> {

@@ -4,6 +4,7 @@ import type { Repository } from "./db.js";
 import { assembleSignedFulfill, SignatureError } from "./evm-signature.js";
 import { computeFees, FeeCapExceeded, type Fees } from "./fees.js";
 import { ModelProviderError, type ModelErrorKind } from "./nearai.js";
+import { SOURCES } from "./sources.js";
 import {
   TERMINAL_STATUSES,
   type BaseChainPort,
@@ -24,9 +25,16 @@ const ALREADY_BROADCAST = /already known|known transaction/i;
 const NONCE_TOO_LOW = /nonce too low/i;
 const RESIGN_PANICS = /max_fee_per_gas above cap|max_priority_fee_per_gas above max_fee_per_gas/;
 const SIGNING_IN_PROGRESS = /request signing in progress/;
+const NEAR_ALREADY_FULFILLED = /request already fulfilled/;
 const ANSWER_CODES: Readonly<Record<string, number>> = { UNKNOWN: 0, YES: 1, NO: 2 };
+const NO_NONCE = 0;
+const NO_FEE = "0";
 
-export const ALREADY_FULFILLED = "already fulfilled on Base";
+export const ALREADY_FULFILLED = alreadyFulfilledOn(SOURCES.base.short);
+
+export function alreadyFulfilledOn(chainLabel: string): string {
+  return `already fulfilled on ${chainLabel}`;
+}
 
 export interface Log {
   info(obj: object, msg: string): void;
@@ -35,28 +43,45 @@ export interface Log {
 }
 
 export interface ProcessorSettings {
-  readonly aiOracleAddress: Address;
-  readonly oracleEvmAddress: Address;
-  readonly baseChainId: number;
-  readonly maxFeePerGas: bigint;
+  readonly chain: string;
+  readonly chainLabel: string;
   readonly dailyModelBudget: number;
   readonly perAddressHourlyLimit: number;
   readonly modelRetries: number;
   readonly mpcRetries: number;
-  readonly receiptAlertMs: number;
-  readonly confirmations: number;
   readonly maxQuestionBytes: number;
   readonly stuckMs: number;
   readonly maxQueue: number;
+}
+
+export interface EvmSettings {
+  readonly aiOracleAddress: Address;
+  readonly oracleEvmAddress: Address;
+  readonly evmChainId: number;
+  readonly maxFeePerGas: bigint;
+  readonly receiptAlertMs: number;
+  readonly confirmations: number;
   readonly evmGasLimit: bigint;
   readonly feeBaseMultiplier: number;
 }
+
+export interface EvmTarget {
+  readonly kind: "evm";
+  readonly base: BaseChainPort;
+  readonly settings: EvmSettings;
+}
+
+export interface NearTarget {
+  readonly kind: "near";
+}
+
+export type ProcessorTarget = EvmTarget | NearTarget;
 
 export interface ProcessorDeps {
   readonly repo: Repository;
   readonly near: NearOraclePort;
   readonly models: ModelProviders;
-  readonly base: BaseChainPort;
+  readonly target: ProcessorTarget;
   readonly clock: Clock;
   readonly log: Log;
   readonly settings: ProcessorSettings;
@@ -174,15 +199,30 @@ export class Processor {
     return this.#wait(req, why, extra);
   }
 
+  async #origin(req: RequestRow): Promise<string> {
+    const { target } = this.#d;
+    if (req.origin) return req.origin;
+    const origin = target.kind === "evm" ? await target.base.txSender(req.askedTx as Hex) : req.requester;
+    this.#d.repo.updateRequest(req.id, { origin });
+    return origin;
+  }
+
+  async #alreadyDone(req: RequestRow): Promise<StepResult | null> {
+    const { target, near, settings } = this.#d;
+    if (target.kind === "near") return (await near.isFulfilled(req.id)) ? this.#end(req, "rejected", alreadyFulfilledOn(settings.chainLabel)) : null;
+    if (await target.base.isFulfilledOnBase(BigInt(req.id))) return this.#end(req, "rejected", alreadyFulfilledOn(settings.chainLabel));
+    if (await near.isFulfilled(req.id)) return this.#end(req, "failed", "fulfilled in NEAR without a local record");
+    return null;
+  }
+
   async #seen(req: RequestRow): Promise<StepResult> {
-    const { repo, base, near, clock, settings } = this.#d;
+    const { repo, clock, settings } = this.#d;
     if (repo.countActiveBefore(req.id) >= settings.maxQueue) return this.#end(req, "rejected", `queue full: ${settings.maxQueue} active requests`);
-    const origin = req.origin ?? (await base.txSender(req.askedTx as Hex));
-    if (!req.origin) repo.updateRequest(req.id, { origin });
+    const origin = await this.#origin(req);
     const bytes = Buffer.byteLength(req.question, "utf8");
     if (bytes > settings.maxQuestionBytes) return this.#end(req, "rejected", `question too long: ${bytes} bytes, max ${settings.maxQuestionBytes}`);
-    if (await base.isFulfilledOnBase(BigInt(req.id))) return this.#end(req, "rejected", ALREADY_FULFILLED);
-    if (await near.isFulfilled(req.id)) return this.#end(req, "failed", "fulfilled in NEAR without a local record");
+    const done = await this.#alreadyDone(req);
+    if (done) return done;
     const recent = repo.countOriginBefore(origin, req.id, clock.now() - HOUR_MS);
     if (recent >= settings.perAddressHourlyLimit) return this.#end(req, "rejected", `rate limit: ${recent} requests from ${origin} in the last hour`);
     return this.#move(req, "answering");
@@ -275,32 +315,46 @@ export class Processor {
     return this.#move(req, "verified");
   }
 
-  async #fees(): Promise<Fees> {
-    const { base, near, settings } = this.#d;
-    const [quote, contractCap] = await Promise.all([base.feeQuote(), near.maxFeePerGasCap()]);
+  async #fees(evm: EvmTarget): Promise<Fees> {
+    const { base, settings } = evm;
+    const [quote, contractCap] = await Promise.all([base.feeQuote(), this.#d.near.maxFeePerGasCap()]);
     return computeFees(quote, { configCap: settings.maxFeePerGas, contractCap }, settings.feeBaseMultiplier);
   }
 
-  async #nonce(): Promise<number> {
-    const { repo, base, settings, log } = this.#d;
-    const pending = await base.pendingNonce(settings.oracleEvmAddress);
+  async #nonce(evm: EvmTarget): Promise<number> {
+    const { repo, log } = this.#d;
+    const pending = await evm.base.pendingNonce(evm.settings.oracleEvmAddress);
     const confirmed = repo.maxConfirmedNonce();
     const floor = confirmed === null ? 0 : confirmed + 1;
-    if (pending < floor) log.warn({ pending, floor }, "Base RPC nonce is behind confirmed transactions, using the floor");
+    if (pending < floor) log.warn({ pending, floor }, "EVM RPC nonce is behind confirmed transactions, using the floor");
     return pending > floor ? pending : floor;
   }
 
   async #verified(req: RequestRow): Promise<StepResult> {
+    const { target } = this.#d;
+    return target.kind === "near" ? this.#verifiedNear(req) : this.#verifiedEvm(req, target);
+  }
+
+  async #verifiedNear(req: RequestRow): Promise<StepResult> {
+    const { repo, near } = this.#d;
+    if (await near.isFulfilled(req.id)) return this.#adoptNearVerdict(req, "fulfilled on NEAR before our transaction");
+    const answers = this.#answers(await near.models(), repo.getModelAnswers(req.id));
+    const signed = await near.signFulfillNear({ request_id: req.id, answers });
+    repo.saveNearTx({ requestId: req.id, txHash: signed.txHash, nonce: NO_NONCE, maxFee: NO_FEE, maxPriorityFee: NO_FEE, signedTxBase64: signed.signedTxBase64 });
+    return this.#move(req, "near_sent");
+  }
+
+  async #verifiedEvm(req: RequestRow, evm: EvmTarget): Promise<StepResult> {
     const { repo, near } = this.#d;
     if (await near.isFulfilled(req.id)) return this.#end(req, "failed", "fulfilled in NEAR without a local record");
     let fees: Fees;
     try {
-      fees = await this.#fees();
+      fees = await this.#fees(evm);
     } catch (err) {
       if (err instanceof FeeCapExceeded) return this.#wait(req, "gas price above cap", { err: err.message, alert: true });
       throw err;
     }
-    const nonce = await this.#nonce();
+    const nonce = await this.#nonce(evm);
     const answers = this.#answers(await near.models(), repo.getModelAnswers(req.id));
     const maxFee = fees.maxFeePerGas.toString();
     const maxPriorityFee = fees.maxPriorityFeePerGas.toString();
@@ -329,9 +383,39 @@ export class Processor {
       outcome = recheck;
     }
     if (outcome.kind === "unknown") return this.#waitOrStuck(req, "NEAR transaction not final yet", { txHash: tx.txHash });
-    if (outcome.kind === "failure") return this.#onNearFailure(req, tx.txHash, outcome.error);
-    if (outcome.kind === "success") return this.#onSigned(req, tx.txHash, outcome.result);
+    const nearSource = this.#d.target.kind === "near";
+    if (outcome.kind === "failure") return nearSource ? this.#onNearFulfillFailure(req, tx.txHash, outcome.error) : this.#onNearFailure(req, tx.txHash, outcome.error);
+    if (outcome.kind === "success") return nearSource ? this.#onNearFulfilled(req, tx.txHash, outcome.result) : this.#onSigned(req, tx.txHash, outcome.result);
     return this.#wait(req, "unexpected NEAR outcome", { txHash: tx.txHash });
+  }
+
+  async #onNearFulfilled(req: RequestRow, txHash: string, result: OnSignedResult): Promise<StepResult> {
+    this.#d.repo.markNearResult(txHash, true, null, JSON.stringify(result));
+    if (result.delivered === false) this.#d.log.warn({ requestId: req.id, txHash }, "verdict stored on NEAR, the asker's on_answer callback failed");
+    return this.#adoptNearVerdict(req, "fulfilled by our transaction");
+  }
+
+  async #onNearFulfillFailure(req: RequestRow, txHash: string, error: string): Promise<StepResult> {
+    this.#d.repo.markNearResult(txHash, false, null, JSON.stringify({ ok: false, error }));
+    if (NEAR_ALREADY_FULFILLED.test(error)) return this.#adoptNearVerdict(req, "NEAR reports the request already fulfilled");
+    return this.#end(req, "failed", `NEAR transaction failed: ${error}`);
+  }
+
+  /**
+   * The NEAR contract state is the verdict people check, not our local consensus. After our own
+   * transaction or a rival one, the stored answer and votes are read back from near_request, and a
+   * difference from the local consensus is kept as the chain says but raised as an alert.
+   */
+  async #adoptNearVerdict(req: RequestRow, why: string): Promise<StepResult> {
+    const { near, repo, log } = this.#d;
+    const onChain = await near.nearRequest(req.id);
+    if (!onChain?.answer) return this.#end(req, "failed", `${why}, but near_request(${req.id}) holds no answer`);
+    if (req.answer !== null && req.answer !== onChain.answer) {
+      log.error({ requestId: req.id, local: req.answer, onChain: onChain.answer, alert: true }, "NEAR holds another answer than the local consensus");
+    }
+    repo.updateRequest(req.id, { answer: onChain.answer, votesJson: JSON.stringify(onChain.votes) });
+    log.info({ requestId: req.id, why }, "NEAR verdict recorded");
+    return this.#move(req, "confirmed");
   }
 
   #onNearFailure(req: RequestRow, txHash: string, error: string): StepResult {
@@ -344,6 +428,10 @@ export class Processor {
   }
 
   #onSigned(req: RequestRow, txHash: string, result: OnSignedResult): StepResult {
+    if (result.chain !== undefined && result.chain !== this.#d.settings.chain) {
+      this.#d.repo.markNearResult(txHash, false, null, JSON.stringify(result));
+      return this.#end(req, "failed", `NEAR signed for chain ${result.chain}, relayer serves ${this.#d.settings.chain}`);
+    }
     if (!result.ok) {
       this.#d.repo.markNearResult(txHash, false, null, JSON.stringify(result));
       return this.#resign(req, `MPC signing failed: ${result.error ?? "ok=false"}`);
@@ -352,8 +440,16 @@ export class Processor {
     return this.#move(req, "near_signed");
   }
 
+  #evmOnly(req: RequestRow): EvmTarget | StepResult {
+    const { target } = this.#d;
+    return target.kind === "evm" ? target : this.#end(req, "failed", `status ${req.status} does not exist for NEAR requests`);
+  }
+
   async #nearSigned(req: RequestRow): Promise<StepResult> {
-    const { repo, settings } = this.#d;
+    const evm = this.#evmOnly(req);
+    if (!("kind" in evm)) return evm;
+    const { repo } = this.#d;
+    const { settings } = evm;
     const tx = repo.latestNearTx(req.id);
     if (!tx?.signatureJson) return this.#end(req, "failed", "near_signed without a stored signature");
     try {
@@ -362,7 +458,7 @@ export class Processor {
         requestId: BigInt(req.id),
         aiOracle: settings.aiOracleAddress,
         oracleAddress: settings.oracleEvmAddress,
-        chainId: settings.baseChainId,
+        chainId: settings.evmChainId,
         nonce: tx.nonce,
         maxFeePerGas: BigInt(tx.maxFee),
         maxGas: settings.evmGasLimit,
@@ -377,9 +473,9 @@ export class Processor {
     return this.#move(req, "base_sent");
   }
 
-  async #broadcast(req: RequestRow, signedTx: Hex): Promise<void> {
+  async #broadcast(req: RequestRow, base: BaseChainPort, signedTx: Hex): Promise<void> {
     try {
-      await this.#d.base.sendRawTransaction(signedTx);
+      await base.sendRawTransaction(signedTx);
     } catch (err) {
       const message = errorMessage(err);
       if (ALREADY_BROADCAST.test(message)) {
@@ -395,13 +491,16 @@ export class Processor {
   }
 
   async #baseSent(req: RequestRow): Promise<StepResult> {
-    const { repo, base, clock, settings } = this.#d;
+    const evm = this.#evmOnly(req);
+    if (!("kind" in evm)) return evm;
+    const { repo, clock } = this.#d;
+    const { base, settings } = evm;
     const tx = repo.latestBaseTx(req.id);
     if (!tx) return this.#end(req, "failed", "base_sent without a stored Base transaction");
     const hash = tx.txHash as Hex;
     let receipt = await base.receipt(hash);
     if (!receipt) {
-      await this.#broadcast(req, tx.signedTx as Hex);
+      await this.#broadcast(req, base, tx.signedTx as Hex);
       receipt = await base.receipt(hash);
     }
     if (!receipt) {

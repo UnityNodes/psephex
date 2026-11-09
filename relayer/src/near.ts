@@ -15,16 +15,24 @@ import type {
   ConsensusResult,
   FulfillArgs,
   ModelInfo,
+  NearFulfillArgs,
   NearOraclePort,
+  NearRequestInfo,
+  NearRequestsPort,
   NearTxOutcome,
   OnSignedResult,
   SignedNearTx,
+  Vote,
 } from "./types.js";
 
 const FINAL_STATUSES = new Set(["FINAL", "EXECUTED"]);
 const UNKNOWN_TX = /unknown transaction|UNKNOWN_TRANSACTION/i;
 const RETRY_LATER = /timed out|timeout|\b408\b|\b504\b/i;
 const NEVER_EXECUTED = /InvalidNonce|Expired/i;
+const DECIMAL = /^\d+$/;
+
+export const FULFILL_EVM_METHOD = "fulfill_on_evm";
+export const FULFILL_NEAR_METHOD = "fulfill_on_near";
 
 export interface NearRpc {
   callFunction<T>(args: { contractId: string; method: string; args: object }): Promise<T | undefined>;
@@ -34,7 +42,7 @@ export interface NearRpc {
 }
 
 export interface FulfillSigner {
-  sign(args: FulfillArgs): Promise<SignedNearTx>;
+  sign(method: string, args: object): Promise<SignedNearTx>;
   publicKey(): Promise<string>;
 }
 
@@ -42,6 +50,7 @@ export interface NearOracleOptions {
   readonly rpc: NearRpc;
   readonly contractId: string;
   readonly relayerId: string;
+  readonly chain: string;
   readonly signer: FulfillSigner | null;
   readonly timeoutMs: number;
   readonly decode?: (bytes: Uint8Array) => unknown;
@@ -65,37 +74,113 @@ function failureMessage(failure: unknown): string {
   return typeof exec === "string" ? exec : JSON.stringify(failure);
 }
 
-function parseOnSigned(base64: string): NearTxOutcome {
+export type ResultParser = (value: unknown) => NearTxOutcome;
+
+export const parseOnSigned: ResultParser = (value) => {
+  if (typeof field(value, "ok") !== "boolean") return { kind: "failure", error: `unexpected ${FULFILL_EVM_METHOD} result: ${JSON.stringify(value)}` };
+  return { kind: "success", result: value as OnSignedResult };
+};
+
+/**
+ * fulfill_on_near returns its JSON verdict when the asker wanted no callback; with a callback the
+ * final receipt is on_client_answered, a bool that only says whether on_answer worked. The verdict
+ * is stored in both cases, so either shape counts as success.
+ */
+export const parseNearFulfill: ResultParser = (value) => {
+  if (typeof value === "boolean") return { kind: "success", result: { ok: true, delivered: value } };
+  if (field(value, "ok") === true) return { kind: "success", result: value as OnSignedResult };
+  return { kind: "failure", error: `unexpected ${FULFILL_NEAR_METHOD} result: ${JSON.stringify(value)}` };
+};
+
+function decodeSuccess(base64: string, parse: ResultParser): NearTxOutcome {
   let value: unknown;
   try {
     value = JSON.parse(Buffer.from(base64, "base64").toString("utf8"));
   } catch {
-    return { kind: "failure", error: "fulfill_on_base returned a value that is not JSON" };
+    return { kind: "failure", error: "the NEAR transaction returned a value that is not JSON" };
   }
-  if (typeof field(value, "ok") !== "boolean") return { kind: "failure", error: `unexpected fulfill_on_base result: ${JSON.stringify(value)}` };
-  return { kind: "success", result: value as OnSignedResult };
+  return parse(value);
 }
 
-export function outcomeFromResponse(resp: unknown): NearTxOutcome {
+export function outcomeFromResponse(resp: unknown, parse: ResultParser = parseOnSigned): NearTxOutcome {
   const finality = field(resp, "final_execution_status");
   const status = field(resp, "status");
   if (typeof finality !== "string" || !FINAL_STATUSES.has(finality)) return { kind: "unknown" };
   const failure = field(status, "Failure");
   if (failure !== undefined) return { kind: "failure", error: failureMessage(failure) };
   const success = field(status, "SuccessValue");
-  if (typeof success === "string") return parseOnSigned(success);
+  if (typeof success === "string") return decodeSuccess(success, parse);
   return { kind: "unknown" };
+}
+
+export interface OracleChain {
+  readonly chain: string;
+  readonly chainId: number;
+  readonly name: string;
+  readonly oracleAddress: string;
+}
+
+export interface OracleConfig {
+  readonly signer: string;
+  readonly path: string;
+  readonly chains: readonly OracleChain[];
+  readonly nearChain: string;
+  readonly nearFee: bigint;
+  readonly lastNearRequestId: number;
+}
+
+function decimal(value: unknown, what: string): bigint {
+  if (typeof value !== "string" || !DECIMAL.test(value)) throw new Error(`${what} is not a decimal string`);
+  return BigInt(value);
+}
+
+function parseChain(raw: unknown): OracleChain {
+  const chain = field(raw, "chain");
+  const chainId = field(raw, "chain_id");
+  const name = field(raw, "name");
+  const oracleAddress = field(raw, "oracle_address");
+  if (typeof chain !== "string" || typeof chainId !== "number" || typeof name !== "string" || typeof oracleAddress !== "string") {
+    throw new Error("config() lists a chain in an unexpected shape");
+  }
+  return { chain, chainId, name, oracleAddress };
+}
+
+function parseVotes(raw: unknown): Vote[] {
+  if (!Array.isArray(raw)) throw new Error("near_request votes is not an array");
+  return raw.map((v) => ({ model: String(field(v, "model")), answer: String(field(v, "answer")) }));
+}
+
+export function parseNearRequest(raw: unknown): NearRequestInfo {
+  const chain = field(raw, "chain");
+  const requestId = field(raw, "request_id");
+  const asker = field(raw, "asker");
+  const question = field(raw, "question");
+  const questionHash = field(raw, "question_hash");
+  const answer = field(raw, "answer") ?? null;
+  if (typeof chain !== "string" || typeof requestId !== "number" || !Number.isSafeInteger(requestId) || requestId <= 0) {
+    throw new Error("near_request returned an unexpected chain or id");
+  }
+  if (typeof asker !== "string" || typeof question !== "string" || typeof questionHash !== "string" || (answer !== null && typeof answer !== "string")) {
+    throw new Error(`near_request ${requestId} has an unexpected shape`);
+  }
+  return { chain, requestId, asker, question, questionHash, paidYocto: decimal(field(raw, "paid"), "near_request paid").toString(), answer, votes: parseVotes(field(raw, "votes")) };
 }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 }
 
-export class NearOracle implements NearOraclePort {
+export class NearOracle implements NearOraclePort, NearRequestsPort {
   readonly #o: NearOracleOptions;
+  readonly #parse: ResultParser;
 
   constructor(opts: NearOracleOptions) {
     this.#o = opts;
+    this.#parse = opts.chain.startsWith("near:") ? parseNearFulfill : parseOnSigned;
+  }
+
+  get chain(): string {
+    return this.#o.chain;
   }
 
   async #view<T>(method: string, args: object): Promise<T | undefined> {
@@ -114,19 +199,19 @@ export class NearOracle implements NearOraclePort {
   }
 
   async buildRequest(requestId: number, question: string, model: string): Promise<string> {
-    const body = await this.#view<unknown>("build_request", { request_id: requestId, question, model });
+    const body = await this.#view<unknown>("build_request", { chain: this.#o.chain, request_id: requestId, question, model });
     if (typeof body !== "string") throw new Error("build_request did not return a string");
     return body;
   }
 
   async verifyConsensus(requestId: number, question: string, answers: readonly ConsensusAnswer[]): Promise<ConsensusResult> {
-    const result = await this.#view<ConsensusResult>("verify_consensus", { request_id: requestId, question, answers });
+    const result = await this.#view<ConsensusResult>("verify_consensus", { chain: this.#o.chain, request_id: requestId, question, answers });
     if (!result || typeof result.ok !== "boolean") throw new Error("verify_consensus returned an unexpected value");
     return result;
   }
 
   async isFulfilled(requestId: number): Promise<boolean> {
-    return (await this.#view<boolean>("is_fulfilled", { request_id: requestId })) === true;
+    return (await this.#view<boolean>("is_fulfilled", { chain: this.#o.chain, request_id: requestId })) === true;
   }
 
   async maxFeePerGasCap(): Promise<bigint> {
@@ -135,16 +220,38 @@ export class NearOracle implements NearOraclePort {
     return BigInt(raw);
   }
 
-  async config(): Promise<{ base_oracle_address: string; base_chain_id: number; signer: string; path: string }> {
+  async config(): Promise<OracleConfig> {
     const raw = await this.#view<unknown>("config", {});
-    const address = field(raw, "base_oracle_address");
-    const chainId = field(raw, "base_chain_id");
     const signer = field(raw, "signer");
     const path = field(raw, "path");
-    if (typeof address !== "string" || typeof chainId !== "number" || typeof signer !== "string" || typeof path !== "string") {
+    const chains = field(raw, "chains");
+    const nearChain = field(raw, "near_chain");
+    const last = field(raw, "last_near_request_id");
+    if (typeof signer !== "string" || typeof path !== "string" || !Array.isArray(chains) || typeof nearChain !== "string" || typeof last !== "number") {
       throw new Error("config() returned an unexpected value");
     }
-    return { base_oracle_address: address, base_chain_id: chainId, signer, path };
+    return { signer, path, chains: chains.map(parseChain), nearChain, nearFee: decimal(field(raw, "near_fee"), "config() near_fee"), lastNearRequestId: last };
+  }
+
+  async nearFee(): Promise<bigint> {
+    return decimal(await this.#view<unknown>("near_fee", {}), "near_fee");
+  }
+
+  async lastNearRequestId(): Promise<number> {
+    const raw = await this.#view<unknown>("last_near_request_id", {});
+    if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 0) throw new Error("last_near_request_id is not a count");
+    return raw;
+  }
+
+  async nearRequest(requestId: number): Promise<NearRequestInfo | null> {
+    const raw = await this.#view<unknown>("near_request", { request_id: requestId });
+    return raw === null || raw === undefined ? null : parseNearRequest(raw);
+  }
+
+  async nearRequests(fromId: number, limit: number): Promise<NearRequestInfo[]> {
+    const raw = await this.#view<unknown>("near_requests", { from_id: fromId, limit });
+    if (!Array.isArray(raw)) throw new Error("near_requests did not return an array");
+    return raw.map(parseNearRequest);
   }
 
   async derivedPublicKey(signer: string, path: string, predecessor: string): Promise<string> {
@@ -154,14 +261,21 @@ export class NearOracle implements NearOraclePort {
     return key;
   }
 
-  async signFulfill(args: FulfillArgs): Promise<SignedNearTx> {
+  #signer(): FulfillSigner {
     if (!this.#o.signer) throw new Error("no relayer key configured for signing");
-    return this.#o.signer.sign(args);
+    return this.#o.signer;
+  }
+
+  async signFulfill(args: FulfillArgs): Promise<SignedNearTx> {
+    return this.#signer().sign(FULFILL_EVM_METHOD, { chain: this.#o.chain, ...args });
+  }
+
+  async signFulfillNear(args: NearFulfillArgs): Promise<SignedNearTx> {
+    return this.#signer().sign(FULFILL_NEAR_METHOD, { ...args });
   }
 
   async relayerKeyPermission(): Promise<unknown> {
-    if (!this.#o.signer) throw new Error("no relayer key configured for signing");
-    const publicKey = await this.#o.signer.publicKey();
+    const publicKey = await this.#signer().publicKey();
     const view = this.#o.rpc.viewAccessKey({ accountId: this.#o.relayerId, publicKey });
     return field(await withTimeout(view, this.#o.timeoutMs, "view access key"), "permission");
   }
@@ -170,7 +284,7 @@ export class NearOracle implements NearOraclePort {
     const decode = this.#o.decode ?? ((bytes: Uint8Array) => SignedTransaction.decode(bytes));
     const tx = decode(base64Decode(signed.signedTxBase64)) as SignedTransaction;
     try {
-      return outcomeFromResponse(await withTimeout(this.#o.rpc.sendTransactionUntil(tx, "FINAL"), this.#o.timeoutMs, "send_tx"));
+      return outcomeFromResponse(await withTimeout(this.#o.rpc.sendTransactionUntil(tx, "FINAL"), this.#o.timeoutMs, "send_tx"), this.#parse);
     } catch (err) {
       const text = errorText(err);
       if (NEVER_EXECUTED.test(text)) return { kind: "invalid", error: err instanceof Error ? err.message : text };
@@ -186,7 +300,7 @@ export class NearOracle implements NearOraclePort {
         this.#o.timeoutMs,
         "tx status",
       );
-      return outcomeFromResponse(resp);
+      return outcomeFromResponse(resp, this.#parse);
     } catch (err) {
       if (UNKNOWN_TX.test(errorText(err))) return { kind: "unknown" };
       throw err;
@@ -201,9 +315,9 @@ export function createFulfillSigner(provider: JsonRpcProvider, relayerId: string
     async publicKey(): Promise<string> {
       return (await signer.getPublicKey()).toString();
     },
-    async sign(args: FulfillArgs): Promise<SignedNearTx> {
+    async sign(method: string, args: object): Promise<SignedNearTx> {
       const publicKey = await signer.getPublicKey();
-      const call = actions.functionCall("fulfill_on_base", { ...args }, teraToGas(gasTera), 0n);
+      const call = actions.functionCall(method, { ...args }, teraToGas(gasTera), 0n);
       const tx = await account.createTransaction({ receiverId: contractId, actions: [call], publicKey });
       const { txHash, signedTransaction } = await signer.signTransaction(tx);
       return { txHash: baseEncode(txHash), signedTxBase64: base64Encode(signedTransaction.encode()) };

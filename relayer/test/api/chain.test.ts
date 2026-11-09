@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { cachedSource, createChainStatus, type ChainReader } from "../../src/api/chain.js";
+import type { SourceName } from "../../src/sources.js";
 import { MODELS } from "./fixture.js";
 
+const ORACLE = "0x3A915e664Bc3c87954b9C1CaD2146B44A8a2e35F" as const;
+const BASE_ONLY = { sources: [{ source: "base", kind: "evm", name: "Base Sepolia" }] as const, oracleEvmAddress: ORACLE, nearRelayerAccount: "relayer.psephex.testnet" };
+
 class FakeReader implements ChainReader {
-  calls = { head: 0, balance: 0, near: 0, models: 0 };
+  calls = { head: 0, balance: 0, near: 0, models: 0, fee: 0 };
+  heads: string[] = [];
   failBase = false;
-  async baseHead(): Promise<bigint> {
+  async head(source: SourceName): Promise<bigint> {
     this.calls.head++;
-    if (this.failBase) throw new Error("fetch failed https://base.rpc.test/secret-key");
-    return 1_000n;
+    this.heads.push(source);
+    if (this.failBase && source === "base") throw new Error("fetch failed https://base.rpc.test/secret-key");
+    return source === "near" ? 7n : 1_000n;
   }
-  async baseBalance(): Promise<bigint> {
+  async evmBalance(): Promise<bigint> {
     this.calls.balance++;
     return 15n * 10n ** 15n;
+  }
+  async nearFee(): Promise<bigint> {
+    this.calls.fee++;
+    return 10n ** 22n;
   }
   async nearBalance(): Promise<bigint> {
     this.calls.near++;
@@ -87,21 +97,36 @@ describe("cachedSource", () => {
 describe("createChainStatus", () => {
   it("reads Base head, oracle balance, relayer NEAR balance and models", async () => {
     const reader = new FakeReader();
-    const chain = createChainStatus(reader, { oracleEvmAddress: "0x3A915e664Bc3c87954b9C1CaD2146B44A8a2e35F", nearRelayerAccount: "relayer.psephex.testnet" }, 5_000, () => 0);
+    const chain = createChainStatus(reader, BASE_ONLY, 5_000, () => 0);
     const snap = await chain.snapshot();
-    expect(snap.base).toMatchObject({ ok: true, value: { head: 1_000n, oracleBalanceWei: 15n * 10n ** 15n } });
+    expect(snap.sources.base).toMatchObject({ ok: true, value: { head: 1_000n, oracleBalanceWei: 15n * 10n ** 15n } });
     expect(snap.near).toMatchObject({ ok: true, value: { relayerBalanceYocto: 5n * 10n ** 24n } });
     expect((await chain.models()).ok).toBe(true);
+    expect(await chain.nearFee()).toMatchObject({ ok: true, value: 10n ** 22n });
     await chain.snapshot();
-    expect(reader.calls).toEqual({ head: 1, balance: 1, near: 1, models: 1 });
+    expect(reader.calls).toEqual({ head: 1, balance: 1, near: 1, models: 1, fee: 1 });
+  });
+
+  it("reads every source and skips the oracle balance for NEAR", async () => {
+    const reader = new FakeReader();
+    const sources = [
+      { source: "base", kind: "evm", name: "Base Sepolia" },
+      { source: "arbitrum", kind: "evm", name: "Arbitrum Sepolia" },
+      { source: "near", kind: "near", name: "NEAR testnet" },
+    ] as const;
+    const snap = await createChainStatus(reader, { ...BASE_ONLY, sources }, 5_000, () => 0).snapshot();
+    expect(reader.heads.sort()).toEqual(["arbitrum", "base", "near"]);
+    expect(reader.calls.balance).toBe(2);
+    expect(snap.sources.near).toMatchObject({ ok: true, value: { head: 7n, oracleBalanceWei: null } });
+    expect(snap.sources.arbitrum).toMatchObject({ ok: true, value: { head: 1_000n } });
   });
 
   it("keeps NEAR data when Base fails", async () => {
     const reader = new FakeReader();
     reader.failBase = true;
-    const chain = createChainStatus(reader, { oracleEvmAddress: "0x3A915e664Bc3c87954b9C1CaD2146B44A8a2e35F", nearRelayerAccount: "relayer.psephex.testnet" }, 5_000, () => 0);
+    const chain = createChainStatus(reader, BASE_ONLY, 5_000, () => 0);
     const snap = await chain.snapshot();
-    expect(snap.base).toEqual({ ok: false, error: "Base RPC unavailable" });
+    expect(snap.sources.base).toEqual({ ok: false, error: "Base Sepolia RPC unavailable" });
     expect(snap.near.ok).toBe(true);
   });
 });
