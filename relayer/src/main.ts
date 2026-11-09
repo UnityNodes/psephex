@@ -10,6 +10,7 @@ import { createLogger } from "./logger.js";
 import { createFulfillSigner, NearOracle, type NearRpc } from "./near.js";
 import { NearAiClient } from "./nearai.js";
 import { Processor, type Log } from "./pipeline.js";
+import { byProvider } from "./providers.js";
 import { Scanner } from "./scanner.js";
 import { startupChecks } from "./startup.js";
 
@@ -19,6 +20,8 @@ const NEAR_TIMEOUT_MS = 60_000;
 const MODEL_TIMEOUT_MS = 120_000;
 const SIGNATURE_RETRIES = 10;
 const SIGNATURE_DELAY_MS = 1_000;
+const NEAR_AI_PROVIDER = "near-ai";
+const PHALA_PROVIDER = "phala";
 
 interface Services {
   readonly repo: Repository;
@@ -42,15 +45,20 @@ function build(config: RelayerConfig, log: Log): Services {
     timeoutMs: NEAR_TIMEOUT_MS,
   });
   const base = new BaseChain({ url: config.baseRpcUrl, aiOracle: config.aiOracleAddress, chainId: config.baseChainId });
-  const models = new NearAiClient({
-    baseUrl: config.nearAiBaseUrl,
-    apiKey: config.nearAiApiKey,
-    fetch: globalThis.fetch,
-    timeoutMs: MODEL_TIMEOUT_MS,
-    signatureRetries: SIGNATURE_RETRIES,
-    signatureDelayMs: SIGNATURE_DELAY_MS,
-    now: clock.now,
-    sleep: (ms) => sleep(ms).then(() => undefined),
+  const client = (baseUrl: string, apiKey: string) =>
+    new NearAiClient({
+      baseUrl,
+      apiKey,
+      fetch: globalThis.fetch,
+      timeoutMs: MODEL_TIMEOUT_MS,
+      signatureRetries: SIGNATURE_RETRIES,
+      signatureDelayMs: SIGNATURE_DELAY_MS,
+      now: clock.now,
+      sleep: (ms) => sleep(ms).then(() => undefined),
+    });
+  const models = byProvider({
+    [NEAR_AI_PROVIDER]: client(config.nearAiBaseUrl, config.nearAiApiKey),
+    ...(config.phalaApiKey ? { [PHALA_PROVIDER]: client(config.phalaBaseUrl, config.phalaApiKey) } : {}),
   });
   const scanner = new Scanner({ repo, base, log, settings: config });
   const processor = new Processor({ repo, near, models, base, clock, log, settings: { ...config, maxQuestionBytes: MAX_QUESTION_BYTES, evmGasLimit: EVM_GAS_LIMIT } });
@@ -77,7 +85,7 @@ async function loop(services: Services, config: RelayerConfig, log: Log, once: b
 async function main(): Promise<void> {
   const once = process.argv.includes("--once");
   const config = loadConfig(process.env);
-  const log = createLogger(process.env.LOG_LEVEL ?? "info", undefined, [config.nearAiApiKey, config.nearRelayerKey, config.baseRpcUrl, config.nearRpcUrl]);
+  const log = createLogger(process.env.LOG_LEVEL ?? "info", undefined, [config.nearAiApiKey, config.nearRelayerKey, config.baseRpcUrl, config.nearRpcUrl, config.phalaApiKey ?? ""]);
   mkdirSync(dirname(config.dbPath), { recursive: true });
   const releaseLock = acquireLock(`${config.dbPath}.lock`);
   const services = build(config, log);

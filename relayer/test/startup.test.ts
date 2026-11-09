@@ -97,6 +97,12 @@ describe("loadConfig", () => {
     expect(c).toMatchObject({ baseChainId: 84532, confirmations: 10, startBlock: 0n, logBlockRange: 200n, stuckMs: 1_800_000, maxQueue: 50, feeBaseMultiplier: 4, nearAiBaseUrl: "https://cloud-api.near.ai" });
   });
 
+  it("treats the Phala key as optional and requires https for Phala", () => {
+    expect(loadConfig(env)).toMatchObject({ phalaApiKey: null, phalaBaseUrl: "https://api.redpill.ai" });
+    expect(loadConfig({ ...env, PHALA_API_KEY: "sk-rp-x" })).toMatchObject({ phalaApiKey: "sk-rp-x" });
+    expect(() => loadConfig({ ...env, PHALA_BASE_URL: "http://api.redpill.ai" })).toThrow(/https/);
+  });
+
   it("reads overrides", () => {
     const c = loadConfig({ ...env, MAX_FEE_GWEI: "0.5", START_BLOCK: "56174081", CONFIRMATIONS: "3", NEAR_AI_BASE_URL: "http://127.0.0.1:9999/" });
     expect(c).toMatchObject({ maxFeePerGas: 500_000_000n, startBlock: 56_174_081n, confirmations: 3, nearAiBaseUrl: "http://127.0.0.1:9999" });

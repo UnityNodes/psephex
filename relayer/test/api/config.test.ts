@@ -31,6 +31,7 @@ describe("loadApiConfig", () => {
   it("refuses to start with relayer secrets in its environment", () => {
     expect(() => loadApiConfig({ ...BASE_ENV, NEAR_RELAYER_KEY: "ed25519:abc" })).toThrow(/NEAR_RELAYER_KEY must not be set/);
     expect(() => loadApiConfig({ ...BASE_ENV, NEAR_AI_API_KEY: "sk-x" })).toThrow(/NEAR_AI_API_KEY must not be set/);
+    expect(() => loadApiConfig({ ...BASE_ENV, PHALA_API_KEY: "sk-rp-x" })).toThrow(/PHALA_API_KEY must not be set/);
   });
 
   it("only serves testnet contracts", () => {

@@ -24,7 +24,7 @@ export interface ApiConfig {
   readonly dailyModelBudget: number;
 }
 
-const FORBIDDEN_SECRETS = ["NEAR_RELAYER_KEY", "NEAR_AI_API_KEY"] as const;
+const FORBIDDEN_SECRETS = ["NEAR_RELAYER_KEY", "NEAR_AI_API_KEY", "PHALA_API_KEY"] as const;
 const NEAR_ACCOUNT = /^(?=.{2,64}$)(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 const SHELL_SAFE_URL = /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?(\/[A-Za-z0-9._~/-]*)?$/;
 const MAX_PORT = 65_535;

@@ -5,6 +5,8 @@ export interface RelayerConfig {
   readonly nearRpcUrl: string;
   readonly nearAiBaseUrl: string;
   readonly nearAiApiKey: string;
+  readonly phalaBaseUrl: string;
+  readonly phalaApiKey: string | null;
   readonly nearRelayerAccount: string;
   readonly nearRelayerKey: string;
   readonly nearOracleContract: string;
@@ -98,6 +100,8 @@ export function loadConfig(env: Env): RelayerConfig {
     nearRpcUrl: serviceUrl(env, "NEAR_RPC_URL"),
     nearAiBaseUrl: serviceUrl(env, "NEAR_AI_BASE_URL", "https://cloud-api.near.ai"),
     nearAiApiKey: required(env, "NEAR_AI_API_KEY"),
+    phalaBaseUrl: serviceUrl(env, "PHALA_BASE_URL", "https://api.redpill.ai"),
+    phalaApiKey: env.PHALA_API_KEY?.trim() || null,
     nearRelayerAccount: required(env, "NEAR_RELAYER_ACCOUNT"),
     nearRelayerKey: nearSecretKey(env, "NEAR_RELAYER_KEY"),
     nearOracleContract: required(env, "NEAR_ORACLE_CONTRACT"),

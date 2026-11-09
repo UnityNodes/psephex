@@ -2,6 +2,7 @@ import { generatePrivateKey } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type Repository } from "../src/db.js";
 import { Processor, type ProcessorSettings } from "../src/pipeline.js";
+import { byProvider } from "../src/providers.js";
 import { AIORACLE, askedEvent, CHAIN_ID, FakeBase, FakeModels, FakeNear, ManualClock, ORACLE_ADDRESS, silentLog } from "./fakes.js";
 
 const SETTINGS: ProcessorSettings = {
@@ -26,11 +27,12 @@ describe("Processor", () => {
   let repo: Repository;
   let near: FakeNear;
   let models: FakeModels;
+  let phalaModels: FakeModels;
   let base: FakeBase;
   let clock: ManualClock;
 
   function processor(settings: Partial<ProcessorSettings> = {}): Processor {
-    return new Processor({ repo, near, models, base, clock, log: silentLog, settings: { ...SETTINGS, ...settings } });
+    return new Processor({ repo, near, models: byProvider({ "near-ai": models, phala: phalaModels }), base, clock, log: silentLog, settings: { ...SETTINGS, ...settings } });
   }
 
   async function settle(p: Processor, id: number, rounds = 20): Promise<{ status: string; waiting: boolean }> {
@@ -51,6 +53,7 @@ describe("Processor", () => {
     repo = openDatabase(":memory:", clock);
     near = new FakeNear();
     models = new FakeModels();
+    phalaModels = new FakeModels();
     base = new FakeBase();
   });
 
@@ -369,5 +372,33 @@ describe("Processor", () => {
 
   it("reports nothing to do on an empty queue", async () => {
     expect(await processor().drain()).toEqual({ processed: [], blockedOn: null });
+  });
+  describe("model providers", () => {
+    it("sends each model to the client of its provider", async () => {
+      near.modelList = [
+        { model: "m-a", provider: "near-ai", scheme: "nearai-v1", publicKey: "aa" },
+        { model: "m-b", provider: "near-ai", scheme: "nearai-v1", publicKey: "bb" },
+        { model: "phala/m-c", provider: "phala", scheme: "nearai-v1", publicKey: "cc" },
+      ];
+      repo.recordAsked([askedEvent(1n)], 200n);
+      await processor().run(1);
+      expect(models.calls).toEqual(["m-a", "m-b"]);
+      expect(phalaModels.calls).toEqual(["phala/m-c"]);
+      expect(phalaModels.signatureCalls).toEqual(["phala/m-c"]);
+    });
+
+    it("waits with an alert when no client serves a provider", async () => {
+      near.modelList = [
+        { model: "m-a", provider: "near-ai", scheme: "nearai-v1", publicKey: "aa" },
+        { model: "m-b", provider: "near-ai", scheme: "nearai-v1", publicKey: "bb" },
+        { model: "x/m-c", provider: "unknown-cloud", scheme: "nearai-v1", publicKey: "cc" },
+      ];
+      repo.recordAsked([askedEvent(1n)], 200n);
+      const warnings: { obj: object; msg: string }[] = [];
+      const log = { ...silentLog, warn: (obj: object, msg: string) => warnings.push({ obj, msg }) };
+      const result = await new Processor({ repo, near, models: byProvider({ "near-ai": models }), base, clock, log, settings: SETTINGS }).run(1);
+      expect(result).toMatchObject({ status: "answering", waiting: true });
+      expect(warnings.at(-1)).toMatchObject({ msg: "no model client configured for provider unknown-cloud", obj: { model: "x/m-c", alert: true } });
+    });
   });
 });

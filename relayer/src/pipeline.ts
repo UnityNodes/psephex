@@ -1,3 +1,4 @@
+import type { ModelProviders } from "./providers.js";
 import type { Address, Hex } from "viem";
 import type { Repository } from "./db.js";
 import { assembleSignedFulfill, SignatureError } from "./evm-signature.js";
@@ -54,7 +55,7 @@ export interface ProcessorSettings {
 export interface ProcessorDeps {
   readonly repo: Repository;
   readonly near: NearOraclePort;
-  readonly models: ModelProviderPort;
+  readonly models: ModelProviders;
   readonly base: BaseChainPort;
   readonly clock: Clock;
   readonly log: Log;
@@ -87,6 +88,10 @@ function errorMessage(err: unknown): string {
 
 function modelErrorKind(err: unknown): ModelErrorKind {
   return err instanceof ModelProviderError ? err.kind : "transient";
+}
+
+function isClient(value: ModelProviderPort | StepResult): value is ModelProviderPort {
+  return typeof (value as ModelProviderPort).complete === "function";
 }
 
 export class Processor {
@@ -205,13 +210,25 @@ export class Processor {
     return this.#askModel(req, next, body, day);
   }
 
+  /**
+   * Each registered model names its provider on NEAR. A model whose provider has no configured
+   * client is an operator mistake, not a model failure, so the request waits with an alert and
+   * falls back to the stuck timeout instead of burning its retries.
+   */
+  #client(req: RequestRow, model: ModelInfo): ModelProviderPort | StepResult {
+    const client = this.#d.models.forProvider(model.provider);
+    return client ?? this.#waitOrStuck(req, `no model client configured for provider ${model.provider}`, { model: model.model, alert: true });
+  }
+
   async #askModel(req: RequestRow, model: ModelInfo, body: string, day: string): Promise<StepResult> {
-    const { repo, models, settings } = this.#d;
+    const { repo, settings } = this.#d;
+    const client = this.#client(req, model);
+    if (!isClient(client)) return client;
     const attempt = repo.beginModelAttempt(req.id, model.model, model.provider, body);
     repo.addModelCalls(day, 1);
     let chatId: string;
     try {
-      const reply = await models.complete(body);
+      const reply = await client.complete(body);
       repo.saveModelCompletion(req.id, model.model, reply);
       chatId = reply.chatId;
     } catch (err) {
@@ -229,8 +246,10 @@ export class Processor {
   }
 
   async #fetchSignature(req: RequestRow, model: ModelInfo, chatId: string): Promise<StepResult> {
+    const client = this.#client(req, model);
+    if (!isClient(client)) return client;
     try {
-      const signature = await this.#d.models.signature(chatId);
+      const signature = await client.signature(chatId);
       this.#d.repo.saveModelSignature(req.id, model.model, signature);
     } catch (err) {
       const kind = modelErrorKind(err);
