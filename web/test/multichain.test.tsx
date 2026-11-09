@@ -13,7 +13,7 @@ import { ApiProvider } from "../src/hooks.js";
 import { describeNearError, formatNear, nearDepositTotal, OPEN_DISPUTE_GAS, parseNear, requestIdFrom, validateNearDispute } from "../src/lib/near-dispute.js";
 import { statusLabel } from "../src/lib/status.js";
 import { deriveProgress, stepOrder } from "../src/lib/steps.js";
-import { caseInfoFrom, type NearCase } from "../src/near/hooks.js";
+import { caseInfoFrom, checkNearPrices, type NearCase } from "../src/near/hooks.js";
 import { createNearRpc, NearRpcProvider, parseTxStatus, type NearRpc } from "../src/near/rpc.js";
 import { NearWalletContext, type NearWallet } from "../src/near/wallet.js";
 import { DisputeForm } from "../src/pages/DisputeForm.js";
@@ -147,6 +147,53 @@ describe("NEAR deposit", () => {
     });
     expect(OPEN_DISPUTE_GAS).toBe(100n * 10n ** 12n);
     expect(rpc.txResult).toHaveBeenCalledWith(NEAR_TX, "alice.testnet");
+  });
+
+  it("stops before signing when the counterparty account does not exist", async () => {
+    const user = userEvent.setup();
+    const wallet = fakeNearWallet({ accountId: "alice.testnet" });
+    renderNear(<DisputeForm arbitrum={null} />, { path: "/app/new", wallet, rpc: fakeNearRpc(PRICES, { ok: true, value: 4 }, ["alice.testnet", "bob.testnet"]) });
+    await user.type(screen.getByLabelText("Question with the evidence"), "Was it delivered?");
+    await user.type(screen.getByLabelText("Counterparty account"), "b0b.testnet");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open dispute" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Open dispute" }));
+    expect(await screen.findByText(/b0b.testnet does not exist on NEAR testnet/)).toBeInTheDocument();
+    expect(wallet.call).not.toHaveBeenCalled();
+  });
+
+  it("asks again instead of signing when the deposit changed after it was shown", async () => {
+    const user = userEvent.setup();
+    const wallet = fakeNearWallet({ accountId: "alice.testnet" });
+    const rpc = fakeNearRpc(PRICES);
+    renderNear(<DisputeForm arbitrum={null} />, { path: "/app/new", wallet, rpc });
+    await user.type(screen.getByLabelText("Question with the evidence"), "Was it delivered?");
+    await user.type(screen.getByLabelText("Counterparty account"), "bob.testnet");
+    await screen.findByText(/You attach/);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Open dispute" })).toBeEnabled());
+    rpc.view.mockImplementation(async (contract: string, method: string) => {
+      if (method === "ask_deposit") return (ASK * 2n).toString();
+      return (PRICES as Record<string, unknown>)[`${contract}.${method}`];
+    });
+    await user.click(screen.getByRole("button", { name: "Open dispute" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/The deposit changed to/);
+    expect(wallet.call).not.toHaveBeenCalled();
+  });
+
+  it("refuses deposits from the RPC outside the contract limits", () => {
+    const near = 10n ** 24n;
+    expect(checkNearPrices({ askDeposit: near / 100n, storageDeposit: near / 1000n })).toEqual({ askDeposit: near / 100n, storageDeposit: near / 1000n });
+    expect(() => checkNearPrices({ askDeposit: 2n * near, storageDeposit: 0n })).toThrow(/oracle deposit outside/);
+    expect(() => checkNearPrices({ askDeposit: 0n, storageDeposit: 0n })).toThrow(/oracle deposit outside/);
+    expect(() => checkNearPrices({ askDeposit: near / 100n, storageDeposit: near })).toThrow(/storage deposit outside/);
+  });
+
+  it("tells an unknown account apart from an RPC failure", async () => {
+    const unknown = vi.fn(async () => new Response(JSON.stringify({ error: { name: "HANDLER_ERROR", cause: { name: "UNKNOWN_ACCOUNT" } } }), { status: 200 }));
+    expect(await createNearRpc("https://rpc.test", unknown as unknown as typeof fetch).accountExists("nobody.testnet")).toBe(false);
+    const known = vi.fn(async () => new Response(JSON.stringify({ result: { amount: "1" } }), { status: 200 }));
+    expect(await createNearRpc("https://rpc.test", known as unknown as typeof fetch).accountExists("bob.testnet")).toBe(true);
+    const broken = vi.fn(async () => new Response(JSON.stringify({ error: { name: "INTERNAL_ERROR", message: "boom" } }), { status: 200 }));
+    await expect(createNearRpc("https://rpc.test", broken as unknown as typeof fetch).accountExists("bob.testnet")).rejects.toThrow(/boom/);
   });
 
   it("says the deposit came back when the oracle refused the question", async () => {

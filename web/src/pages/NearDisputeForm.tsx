@@ -69,14 +69,26 @@ export function NearDisputeForm() {
     setMessage(null);
     try {
       setPhase("checking");
+      if (!(await rpc.accountExists(checked.value.counterparty))) {
+        setPhase("idle");
+        setErrors({ counterparty: `${checked.value.counterparty} does not exist on NEAR testnet. Check the spelling.` });
+        return;
+      }
       const fresh = await readNearPrices(rpc, checked.value.question);
+      const freshTotal = nearDepositTotal({ stake: checked.value.stake, ...fresh });
+      if (total !== null && freshTotal !== total) {
+        setPhase("idle");
+        setMessage(`The deposit changed to ${formatNear(freshTotal)} NEAR while you were typing. Check it and open the dispute again.`);
+        await prices.refetch();
+        return;
+      }
       setPhase("signing");
       const hash = await wallet.call({
         receiverId: NEAR_DISPUTE_CONTRACT,
         methodName: "open_dispute",
         args: { question: checked.value.question, counterparty: checked.value.counterparty, oracle_deposit: fresh.askDeposit.toString() },
         gas: OPEN_DISPUTE_GAS,
-        deposit: nearDepositTotal({ stake: checked.value.stake, ...fresh }),
+        deposit: freshTotal,
       });
       setTxHash(hash);
       setPhase("confirming");

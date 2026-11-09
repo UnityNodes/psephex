@@ -6,6 +6,7 @@ export type NearTxResult = { readonly ok: true; readonly value: unknown } | { re
 export interface NearRpc {
   view<T>(contract: string, method: string, args: Readonly<Record<string, unknown>>): Promise<T>;
   txResult(hash: string, sender: string): Promise<NearTxResult>;
+  accountExists(accountId: string): Promise<boolean>;
 }
 
 export class NearRpcError extends Error {}
@@ -67,6 +68,13 @@ export function createNearRpc(url: string, fetchImpl: typeof fetch = fetch): Nea
       const bytes = reply.result?.result;
       if (!bytes) throw new NearRpcError(`no result from ${contract}.${method}`);
       return JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes))) as T;
+    },
+    async accountExists(accountId: string): Promise<boolean> {
+      const reply = await call("query", { request_type: "view_account", finality: "final", account_id: accountId });
+      if (reply.result) return true;
+      const name = reply.error?.cause?.name ?? reply.error?.name ?? "";
+      if (/UNKNOWN_ACCOUNT/i.test(name)) return false;
+      throw new NearRpcError(reply.error?.message ?? "NEAR RPC error");
     },
     async txResult(hash: string, sender: string): Promise<NearTxResult> {
       for (let attempt = 1; ; attempt++) {

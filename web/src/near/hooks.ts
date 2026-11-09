@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT } from "../deployment.js";
 import type { NearDisputeConfig } from "../lib/near-dispute.js";
 import type { CaseInfo } from "../lib/steps.js";
-import { useNearRpc, type NearRpc } from "./rpc.js";
+import { NearRpcError, useNearRpc, type NearRpc } from "./rpc.js";
 
 const CASE_POLL_MS = 4_000;
 const PRICE_DEBOUNCE_MS = 350;
@@ -35,12 +35,27 @@ export function caseInfoFrom(c: NearCase): CaseInfo {
   return { claimant: c.claimant, counterparty: c.counterparty, amount: BigInt(c.amount), deadline: BigInt(c.deadline_ns) / NS_PER_SECOND, escalated: c.escalated, settled: c.settled };
 }
 
+const YOCTO_PER_NEAR = 10n ** 24n;
+const MAX_ORACLE_FEE = YOCTO_PER_NEAR;
+const MAX_STORAGE_PART = YOCTO_PER_NEAR / 20n;
+
+/**
+ * The deposit the wallet signs for comes from the NEAR RPC, so a wrong or hostile RPC could ask
+ * for any amount. The oracle contract caps its fee at 1 NEAR and a 2000-byte question needs well
+ * under 0.05 NEAR of storage in either contract, so anything above those bounds is refused here.
+ */
+export function checkNearPrices(prices: { askDeposit: bigint; storageDeposit: bigint }): { askDeposit: bigint; storageDeposit: bigint } {
+  if (prices.askDeposit <= 0n || prices.askDeposit > MAX_ORACLE_FEE + MAX_STORAGE_PART) throw new NearRpcError("NEAR RPC returned an oracle deposit outside the contract limits");
+  if (prices.storageDeposit < 0n || prices.storageDeposit > MAX_STORAGE_PART) throw new NearRpcError("NEAR RPC returned a storage deposit outside the contract limits");
+  return prices;
+}
+
 export async function readNearPrices(rpc: NearRpc, question: string): Promise<{ askDeposit: bigint; storageDeposit: bigint }> {
   const [ask, storage] = await Promise.all([
     rpc.view<string>(NEAR_ORACLE_CONTRACT, "ask_deposit", { question }),
     rpc.view<string>(NEAR_DISPUTE_CONTRACT, "storage_deposit", { question }),
   ]);
-  return { askDeposit: BigInt(ask), storageDeposit: BigInt(storage) };
+  return checkNearPrices({ askDeposit: BigInt(ask), storageDeposit: BigInt(storage) });
 }
 
 function useDebounced<T>(value: T, ms: number): T {

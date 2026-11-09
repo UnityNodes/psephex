@@ -14,11 +14,12 @@ export function fakeNearWallet(over: Partial<NearWallet> = {}): NearWallet {
   };
 }
 
-export function fakeNearRpc(views: Readonly<Record<string, unknown>>, tx: NearTxResult = { ok: true, value: 4 }): NearRpc & { view: ReturnType<typeof vi.fn> } {
+export function fakeNearRpc(views: Readonly<Record<string, unknown>>, tx: NearTxResult = { ok: true, value: 4 }, accounts: readonly string[] | null = null): NearRpc & { view: ReturnType<typeof vi.fn> } {
   const view = vi.fn(async (contract: string, method: string) => {
     const key = `${contract}.${method}`;
     if (!(key in views)) throw new Error(`no fake for ${key}`);
     return views[key];
   });
-  return { view, txResult: vi.fn(async () => tx) } as unknown as NearRpc & { view: ReturnType<typeof vi.fn> };
+  const accountExists = vi.fn(async (id: string) => accounts === null || accounts.includes(id));
+  return { view, txResult: vi.fn(async () => tx), accountExists } as unknown as NearRpc & { view: ReturnType<typeof vi.fn> };
 }
