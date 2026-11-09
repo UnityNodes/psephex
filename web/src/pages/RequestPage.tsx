@@ -161,7 +161,7 @@ export function RequestPage() {
           </span>
           {d && <Badge variant="outline">{STATUS_LABEL[d.status]}</Badge>}
         </div>
-        <h1 className="m-0 max-w-[34ch] font-display text-3xl leading-tight font-semibold break-words sm:text-4xl">{title}</h1>
+        <h1 className="m-0 max-w-[34ch] font-display text-2xl leading-tight font-bold break-words sm:text-3xl">{title}</h1>
         {notFound && <p className="m-0 text-muted">If you just opened it, wait a few seconds for Base to include the transaction.</p>}
         {matches === true && <p className="m-0 text-sm text-muted">This text matches the question hash stored on Base.</p>}
         {matches === false && (
@@ -171,7 +171,7 @@ export function RequestPage() {
         )}
       </header>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-10">
         <section aria-labelledby="votes-heading" className="flex flex-col gap-6">
           <h2 id="votes-heading" className="m-0 font-display text-2xl font-semibold">
             The vote

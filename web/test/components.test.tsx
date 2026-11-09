@@ -91,8 +91,9 @@ describe("RecentDisputes", () => {
     const api = fixtureApi();
     const spy = vi.spyOn(api, "requests");
     render(withProviders(api, <RecentDisputes />));
-    await userEvent.selectOptions(screen.getByRole("combobox"), "failed");
+    await userEvent.click(screen.getByRole("tab", { name: "Stopped" }));
     expect(spy).toHaveBeenLastCalledWith({ limit: 20, status: "failed" });
+    expect(screen.getByRole("tab", { name: "Stopped" })).toHaveAttribute("aria-selected", "true");
   });
 });
 

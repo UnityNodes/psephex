@@ -10,7 +10,7 @@ function shortName(model: string): string {
   return model.split("/").at(-1) ?? model;
 }
 
-export function BallotDisc({ vote, size = 64 }: { vote: Answer | null; size?: number }) {
+export function BallotDisc({ vote, size = 64, drop = true }: { vote: Answer | null; size?: number; drop?: boolean }) {
   const metal = `psephos-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   if (!vote) {
     return (
@@ -20,7 +20,7 @@ export function BallotDisc({ vote, size = 64 }: { vote: Answer | null; size?: nu
     );
   }
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" className="ballot-drop">
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" className={drop ? "ballot-drop" : undefined}>
       <defs>
         <radialGradient id={metal} cx="34%" cy="28%" r="78%">
           <stop offset="0" stopColor="var(--bronze-hi)" />

@@ -22,6 +22,6 @@ fetch() {
   install -m 644 "$found" "$DEST/$file"
 }
 
-fetch clash-display ClashDisplay-Variable.woff2 dbe4b338d40d727ba0f342228d3c53d5429995264cf031fd975f6265a57da662
-fetch switzer Switzer-Variable.woff2 d1bf801ffb1a6096def70a7c532255722ad87d948b13a8a586e342f7091f8ee4
+fetch cabinet-grotesk CabinetGrotesk-Variable.woff2 f71103771c9e32406026b6ea46c7e57cb977d5884e70d0f1beeab91ab2c7abb6
+fetch satoshi Satoshi-Variable.woff2 e739aff9b4d02c264341d6d4872edcda28e79373aeda936f659566a1cd3eb47f
 echo "fonts ready in $DEST"

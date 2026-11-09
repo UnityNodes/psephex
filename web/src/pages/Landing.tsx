@@ -1,19 +1,35 @@
-import { useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
+import { Box, Check, Coins, Cpu, ShieldCheck, Signature, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import clientSource from "../../../contracts/base/src/examples/YesNoClient.sol?raw";
 import type { Stats } from "../api.js";
-import { Ballots } from "../components/Ballots.js";
+import { LivePath } from "../components/LivePath.js";
 import { CopyButton } from "../components/Commands.js";
 import { SiteFooter } from "../components/SiteFooter.js";
 import { SiteHeader } from "../components/SiteHeader.js";
 import { Button } from "../components/ui/button.js";
-import { BorderBeam } from "../components/ui/border-beam.js";
-import { Card } from "../components/ui/card.js";
 import { NumberTicker } from "../components/ui/number-ticker.js";
 import { AIORACLE_ADDRESS } from "../deployment.js";
 import { useLatestVerdict, usePageTitle, useStats } from "../hooks.js";
-import { displayText } from "../lib/dispute.js";
-import { ballots } from "../lib/steps.js";
+
+const STEP_ICONS: readonly ReactNode[] = [Box, Cpu, ShieldCheck, Signature, Coins].map((Icon, i) => <Icon key={i} className="size-4" aria-hidden="true" />);
+
+function Reveal({ children, className, delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
+  const still = useReducedMotion() === true || typeof IntersectionObserver === "undefined";
+  if (still) return <div className={className}>{children}</div>;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.15 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 const STEPS: readonly { title: string; body: string; where: string }[] = [
   { where: "Base", title: "Base records the question", body: "A contract calls AiOracle.ask with a yes-or-no question and the 0.0001 ETH fee. Base stores the hash of the question." },
@@ -91,46 +107,28 @@ function LiveNumbers() {
   );
 }
 
-function LatestVerdict() {
-  const { detail } = useLatestVerdict();
-  const still = useReducedMotion() === true;
-  const seconds = detail?.timeToConfirmMs != null ? (detail.timeToConfirmMs / 1000).toFixed(1) : null;
-  return (
-    <Card role="region" aria-labelledby="latest-heading" className="relative gap-5 overflow-hidden rounded-2xl border-line bg-paper p-6 shadow-[0_24px_60px_-36px_rgb(0_0_0/0.55)]">
-      <h2 id="latest-heading" className="m-0 text-sm font-medium text-muted">
-        Latest verdict
-      </h2>
-      {detail ? (
-        <>
-          <p className="m-0 line-clamp-3 font-display text-xl leading-snug font-medium break-words">{displayText(detail.question)}</p>
-          <Ballots ballots={ballots(detail)} verdict={detail.answer} compact />
-          {seconds && <p className="m-0 text-sm text-muted">Answered on Base {seconds} s after the relayer saw it.</p>}
-          <Link to={`/app/r/${detail.id}`} className="self-start text-sm font-medium text-bronze-text underline underline-offset-4 hover:text-ink">
-            See how dispute #{detail.id} was decided
-          </Link>
-        </>
-      ) : (
-        <Ballots ballots={[]} verdict={null} compact />
-      )}
-      {!still && <BorderBeam size={90} duration={9} borderWidth={1.5} colorFrom="var(--bronze-hi)" colorTo="var(--bronze-lo)" />}
-    </Card>
-  );
-}
-
 function HowItWorks() {
   return (
-    <section id="how" aria-labelledby="how-heading" className="flex scroll-mt-6 flex-col gap-10">
-      <h2 id="how-heading" className="m-0 font-display text-3xl font-semibold sm:text-4xl">
-        How it works
-      </h2>
-      <ol aria-label="How a question is answered" className="m-0 grid list-none gap-0 p-0 md:grid-cols-5 md:gap-6">
+    <section id="how" aria-labelledby="how-heading" className="grid scroll-mt-6 gap-10 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] lg:gap-16">
+      <div className="flex flex-col gap-4 lg:sticky lg:top-10 lg:self-start">
+        <h2 id="how-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
+          How it works
+        </h2>
+        <p className="m-0 max-w-[44ch] text-muted">One question crosses two chains and three enclaves. No step trusts our server: NEAR checks the signatures, and Base only accepts an answer signed by NEAR MPC.</p>
+      </div>
+      <ol aria-label="How a question is answered" className="m-0 flex list-none flex-col p-0">
         {STEPS.map((s, i) => (
-          <li key={s.title} className="relative flex flex-col gap-2 border-l border-line py-4 pl-5 md:border-t-2 md:border-l-0 md:border-bronze md:py-0 md:pt-5 md:pl-0">
-            <span className="font-display text-sm font-medium text-bronze-text">
-              {i + 1}. {s.where}
-            </span>
-            <h3 className="m-0 text-base font-semibold text-ink">{s.title}</h3>
-            <p className="m-0 text-sm text-muted">{s.body}</p>
+          <li key={s.title} className="border-t border-line py-6 last:border-b">
+            <Reveal className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4" delay={i * 0.05}>
+              <span className="flex size-10 items-center justify-center rounded-xl bg-raised text-bronze-text">{STEP_ICONS[i]}</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-bronze-text">
+                  {i + 1}. {s.where}
+                </span>
+                <h3 className="m-0 font-display text-xl font-bold text-ink">{s.title}</h3>
+                <p className="m-0 max-w-[60ch] text-muted">{s.body}</p>
+              </div>
+            </Reveal>
           </li>
         ))}
       </ol>
@@ -140,33 +138,50 @@ function HowItWorks() {
 
 function Limits() {
   return (
-    <div className="grid gap-12 md:grid-cols-2 md:gap-16">
-      <section aria-labelledby="proves-heading" className="flex flex-col gap-4">
-        <h2 id="proves-heading" className="m-0 font-display text-2xl font-semibold">
+    <div className="grid gap-4 md:grid-cols-2">
+      <section aria-labelledby="proves-heading" className="flex flex-col gap-5 rounded-3xl border border-line bg-paper p-6 sm:p-8">
+        <h2 id="proves-heading" className="m-0 font-display text-2xl font-extrabold">
           What a verdict proves
         </h2>
-        <ul className="m-0 flex list-disc flex-col gap-3 pl-5 text-[15px] marker:text-yes">
+        <ul className="m-0 flex list-none flex-col gap-4 p-0">
           {PROVES.map((p) => (
-            <li key={p}>{p}</li>
+            <li key={p} className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-3">
+              <Check className="mt-1 size-4 text-yes" aria-hidden="true" />
+              <span>{p}</span>
+            </li>
           ))}
         </ul>
       </section>
-      <section aria-labelledby="limits-heading" className="flex flex-col gap-4">
-        <h2 id="limits-heading" className="m-0 font-display text-2xl font-semibold">
+      <section aria-labelledby="limits-heading" className="flex flex-col gap-5 rounded-3xl border border-line bg-paper p-6 sm:p-8">
+        <h2 id="limits-heading" className="m-0 font-display text-2xl font-extrabold">
           What a verdict does not prove
         </h2>
-        <ul className="m-0 flex list-disc flex-col gap-3 pl-5 text-[15px] marker:text-no">
+        <ul className="m-0 flex list-none flex-col gap-4 p-0 [&>li]:grid [&>li]:grid-cols-[1.25rem_minmax(0,1fr)] [&>li]:gap-3">
           <li>
+            <X className="mt-1 size-4 text-no" aria-hidden="true" />
+            <span>
             That the answer is right. In{" "}
             <Link to="/app/r/2" className="underline underline-offset-2 hover:text-bronze-text">
               dispute #2
             </Link>{" "}
-            all three models said 9 is a prime number, and the oracle delivered that.
+            all three models said 9 is a prime number, and the oracle delivered that.</span>
           </li>
-          <li>That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.</li>
-          <li>Fully independent operators. Two models run on NEAR AI and one on Phala, and on Phala one attested gateway signs for the model it routes to, so you trust that gateway.</li>
-          <li>Knowledge of fresh events. Put the evidence in the question itself.</li>
-          <li>A fixed set of models. The owner of the NEAR contract can change it.</li>
+          <li>
+            <X className="mt-1 size-4 text-no" aria-hidden="true" />
+            <span>That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.</span>
+          </li>
+          <li>
+            <X className="mt-1 size-4 text-no" aria-hidden="true" />
+            <span>Fully independent operators. Two models run on NEAR AI and one on Phala, and on Phala one attested gateway signs for the model it routes to, so you trust that gateway.</span>
+          </li>
+          <li>
+            <X className="mt-1 size-4 text-no" aria-hidden="true" />
+            <span>Knowledge of fresh events. Put the evidence in the question itself.</span>
+          </li>
+          <li>
+            <X className="mt-1 size-4 text-no" aria-hidden="true" />
+            <span>A fixed set of models. The owner of the NEAR contract can change it.</span>
+          </li>
         </ul>
       </section>
     </div>
@@ -177,7 +192,7 @@ function ForDevelopers() {
   return (
     <section id="developers" aria-labelledby="dev-heading" className="grid scroll-mt-6 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
       <div className="flex flex-col gap-4">
-        <h2 id="dev-heading" className="m-0 font-display text-3xl font-semibold sm:text-4xl">
+        <h2 id="dev-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
           Use it from your contract
         </h2>
         <p className="m-0 text-muted">
@@ -206,6 +221,11 @@ function ForDevelopers() {
   );
 }
 
+function HeroPath() {
+  const { detail } = useLatestVerdict();
+  return <LivePath detail={detail} />;
+}
+
 export function Landing() {
   usePageTitle("Psephex: an AI oracle for Base checked on NEAR");
   return (
@@ -231,31 +251,37 @@ export function Landing() {
           </nav>
         </SiteHeader>
 
-        <main className="flex flex-col gap-24 pt-10 pb-24 sm:pt-16">
-          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)] lg:gap-16">
-            <div className="flex flex-col gap-7">
-              <h1 className="m-0 max-w-[16ch] font-display text-[2.6rem] leading-[0.98] font-semibold tracking-[-0.015em] sm:text-6xl lg:text-7xl">Three AI models answer, NEAR checks that two agree, Base gets the verdict.</h1>
-              <p className="m-0 max-w-[56ch] text-base text-muted sm:text-lg">
-                Psephex is a yes-or-no oracle for Base. Every answer is signed inside a TEE, a NEAR contract enforces two of three, and NEAR Chain Signatures write the result back to Base. No bridge, no oracle key on a server.
-              </p>
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-                <Button asChild size="lg">
-                  <Link to="/app">Try it on Base Sepolia</Link>
-                </Button>
-                <a href="#proof" className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-bronze-text">
-                  What it proves
-                </a>
+        <main className="flex flex-col gap-24 pt-10 pb-24 sm:pt-14">
+          <div className="flex flex-col gap-10">
+            <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-16">
+              <h1 className="m-0 font-display text-[2.7rem] leading-[0.95] font-extrabold sm:text-6xl lg:text-7xl">Three AI models answer, NEAR checks that two agree, Base gets the verdict.</h1>
+              <div className="flex flex-col gap-6">
+                <p className="m-0 max-w-[52ch] text-base text-muted sm:text-lg">
+                  Psephex is a yes-or-no oracle for Base. Every answer is signed inside a TEE, a NEAR contract enforces two of three, and NEAR Chain Signatures write the result back to Base. No bridge, no oracle key on a server.
+                </p>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <Button asChild size="lg">
+                    <Link to="/app">Try it on Base Sepolia</Link>
+                  </Button>
+                  <a href="#proof" className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-bronze-text">
+                    What it proves
+                  </a>
+                </div>
               </div>
             </div>
-            <LatestVerdict />
+            <HeroPath />
           </div>
 
           <LiveNumbers />
           <HowItWorks />
           <div id="proof" className="scroll-mt-6">
-            <Limits />
+            <Reveal>
+              <Limits />
+            </Reveal>
           </div>
-          <ForDevelopers />
+          <Reveal>
+            <ForDevelopers />
+          </Reveal>
         </main>
 
         <SiteFooter />

@@ -1,5 +1,6 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadEnv, type Plugin, type PluginOption } from "vite";
@@ -19,7 +20,7 @@ function requireApiUrl(raw: string | undefined): string {
   return url.origin;
 }
 
-const FONTS = ["ClashDisplay-Variable.woff2", "Switzer-Variable.woff2"];
+const FONTS = ["CabinetGrotesk-Variable.woff2", "Satoshi-Variable.woff2"];
 
 /**
  * The Fontshare license forbids putting the font files in a public repository, so they are
@@ -31,11 +32,18 @@ function requireFonts(): void {
   if (missing.length > 0) throw new Error(`missing fonts ${missing.join(", ")}: run scripts/fetch-fonts.sh first`);
 }
 
+/**
+ * Radix dialogs lock page scroll by inserting a <style> tag, which a strict style-src blocks, so the
+ * page behind an open dialog kept scrolling. The tag carries this per-build nonce. It is public in
+ * the bundle, so it only admits styles, never scripts, which stay limited to 'self'.
+ */
+const STYLE_NONCE = randomBytes(16).toString("base64url");
+
 function contentSecurityPolicy(apiOrigin: string, rpcOrigin: string): Plugin {
   const policy = [
     "default-src 'self'",
     "script-src 'self'",
-    "style-src 'self'",
+    `style-src 'self' 'nonce-${STYLE_NONCE}'`,
     "img-src 'self' data:",
     "font-src 'self'",
     `connect-src 'self' ${apiOrigin} ${rpcOrigin}`,
@@ -57,6 +65,7 @@ export default defineConfig(({ command, mode }) => {
   if (command === "build") plugins.push(contentSecurityPolicy(requireApiUrl(env.VITE_API_URL), new URL(env.VITE_BASE_RPC_URL || DEFAULT_RPC).origin));
   return {
     plugins,
+    define: { __STYLE_NONCE__: JSON.stringify(command === "build" ? STYLE_NONCE : "") },
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
     build: { target: "es2022", sourcemap: false },
     server: { fs: { allow: [".", "../contracts/base/src/examples"] } },

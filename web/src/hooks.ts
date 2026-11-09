@@ -54,6 +54,11 @@ export function useStats() {
   return useQuery({ queryKey: ["stats"], queryFn: () => api.stats(), refetchInterval: 30_000 });
 }
 
+export function useHealth() {
+  const api = useApi();
+  return useQuery({ queryKey: ["health"], queryFn: () => api.health(), refetchInterval: 20_000 });
+}
+
 export function useLatestVerdict() {
   const api = useApi();
   const latest = useQuery({ queryKey: ["latest-confirmed"], queryFn: () => api.requests({ limit: 1, status: "confirmed" }), refetchInterval: 30_000 });

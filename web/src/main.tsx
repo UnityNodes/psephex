@@ -1,3 +1,4 @@
+import { setNonce } from "get-nonce";
 import { MotionConfig } from "motion/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
@@ -8,6 +9,8 @@ import { App } from "./App.js";
 import { ThemeProvider } from "./components/theme-provider.js";
 import "./index.css";
 import { wagmiConfig } from "./wagmi.js";
+
+if (__STYLE_NONCE__) setNonce(__STYLE_NONCE__);
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 2, refetchOnWindowFocus: false } } });
 const root = document.getElementById("root");

@@ -1,20 +1,21 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "@fontsource/ibm-plex-mono/400.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @font-face {
-  font-family: "Clash Display";
-  src: url("/fonts/ClashDisplay-Variable.woff2") format("woff2");
-  font-weight: 200 700;
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/CabinetGrotesk-Variable.woff2") format("woff2");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: "Switzer";
-  src: url("/fonts/Switzer-Variable.woff2") format("woff2");
-  font-weight: 100 900;
+  font-family: "Satoshi";
+  src: url("/fonts/Satoshi-Variable.woff2") format("woff2");
+  font-weight: 300 900;
   font-style: normal;
   font-display: swap;
 }
@@ -103,8 +104,8 @@
   --color-ring: var(--bronze);
   --color-destructive: var(--no);
 
-  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Switzer", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
@@ -122,7 +123,6 @@ body {
   min-height: 100dvh;
   background: var(--stone);
   line-height: 1.55;
-  font-feature-settings: "ss01";
 }
 
 ::selection {
@@ -158,8 +158,4 @@ body {
   .ballot-drop {
     animation: none;
   }
-}
-
-.font-display {
-  word-spacing: 0.08em;
 }

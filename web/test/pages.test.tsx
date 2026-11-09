@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -171,13 +171,25 @@ describe("App", () => {
     expect(await landing.findByRole("heading", { level: 1, name: /Three AI models answer/ })).toBeInTheDocument();
     landing.unmount();
     const dashboard = setup(APP, "/app");
-    expect(await dashboard.findByRole("heading", { level: 1, name: /Put a yes-or-no dispute/ })).toBeInTheDocument();
+    expect(await dashboard.findByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();
+    expect(dashboard.getByRole("region", { name: "Live numbers" })).toBeInTheDocument();
+    expect(dashboard.getAllByRole("link", { name: /New dispute/ })[0]).toHaveAttribute("href", "/app/new");
     expect(dashboard.getByRole("link", { name: /oracle\.psephex\.testnet on Nearblocks/ })).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("opens the new dispute form in a dialog and closes it back to the list", async () => {
+    setup(APP, "/app/new");
+    const dialog = await screen.findByRole("dialog", { name: "Open a dispute" });
+    expect(within(dialog).getByLabelText("Question with the evidence")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();
   });
 
   it("routes to a dispute and to an unknown page", async () => {
     setup(APP, "/app/r/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE } });
-    expect(await screen.findByRole("heading", { name: "The path of this dispute" })).toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: "Dispute #7" });
+    expect(await within(sheet).findByRole("heading", { name: "The path of this dispute" })).toBeInTheDocument();
     const other = setup(APP, "/app/nope");
     expect(await other.findByText(/This page does not exist/)).toBeInTheDocument();
   });

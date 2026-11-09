@@ -71,6 +71,14 @@ export const statsSchema = z.object({
   avgSecondsSeenToConfirmed: z.number().nullable(),
 });
 
+export const healthSchema = z.object({
+  status: z.string(),
+  base: z.object({ lagBlocks: z.string(), stale: z.boolean() }),
+  near: z.object({ stale: z.boolean() }),
+  budget: z.object({ modelCalls: z.number(), dailyLimit: z.number() }),
+  errors: z.array(z.unknown()),
+});
+
 const pageMeta = z.object({ limit: z.number(), nextCursor: z.number().nullable() });
 
 export type RequestSummary = z.infer<typeof requestSummarySchema>;
@@ -80,6 +88,7 @@ export type ModelView = z.infer<typeof modelSchema>;
 export type Stats = z.infer<typeof statsSchema>;
 export type RequestStatus = z.infer<typeof status>;
 export type Answer = z.infer<typeof answer>;
+export type Health = z.infer<typeof healthSchema>;
 
 export interface RequestPage {
   readonly items: readonly RequestSummary[];
@@ -110,6 +119,7 @@ export interface Api {
   requests(q: ListQuery): Promise<RequestPage>;
   models(): Promise<ModelView[]>;
   stats(): Promise<Stats>;
+  health(): Promise<Health>;
 }
 
 export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch): Api {
@@ -149,6 +159,9 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch): Api
     },
     async stats() {
       return (await get("/stats", one(statsSchema)))!.data;
+    },
+    async health() {
+      return (await get("/health", one(healthSchema)))!.data;
     },
   };
 }
