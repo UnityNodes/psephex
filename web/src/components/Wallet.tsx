@@ -1,6 +1,6 @@
 import { Wallet as WalletIcon } from "lucide-react";
 import { useConnect, useConnection, useConnectors, useDisconnect, useSwitchChain } from "wagmi";
-import { CHAIN } from "../deployment.js";
+import { CHAIN } from "../chain.js";
 import { Button } from "./ui/button.js";
 
 export function shortAddress(address: string): string {

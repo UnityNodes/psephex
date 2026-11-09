@@ -6,8 +6,9 @@ import { readContract, simulateContract, waitForTransactionReceipt } from "wagmi
 import { aiOracleAbi, disputeAbi } from "../abi.js";
 import { BallotDisc } from "../components/Ballots.js";
 import { Button } from "../components/ui/button.js";
-import { AIORACLE_ADDRESS, CHAIN, DISPUTE_ADDRESS, explorer, FAUCET_URL } from "../deployment.js";
-import { useDisputeLimits } from "../hooks.js";
+import { CHAIN } from "../chain.js";
+import { AIORACLE_ADDRESS, DISPUTE_ADDRESS, explorer, FAUCET_URL } from "../deployment.js";
+import { useDisputeLimits } from "../chain-hooks.js";
 import { describeTxError, EXAMPLES, questionBytes, validateDispute, type DisputeErrors } from "../lib/dispute.js";
 
 type Phase = "idle" | "checking" | "signing" | "confirming" | "error";

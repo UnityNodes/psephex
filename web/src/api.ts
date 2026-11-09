@@ -1,58 +1,58 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 const answer = z.enum(["YES", "NO", "UNKNOWN"]);
 const status = z.enum(["seen", "answering", "verified", "near_sent", "near_signed", "base_sent", "confirmed", "rejected", "failed"]);
 
 export const requestSummarySchema = z.object({
-  id: z.number().int().positive(),
+  id: z.int().check(z.positive()),
   question: z.string(),
-  answer: answer.nullable(),
+  answer: z.nullable(answer),
   status,
-  reason: z.string().nullable(),
+  reason: z.nullable(z.string()),
   requester: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
 export const requestDetailSchema = z.object({
-  id: z.number().int().positive(),
+  id: z.int().check(z.positive()),
   requester: z.string(),
-  origin: z.string().nullable(),
+  origin: z.nullable(z.string()),
   question: z.string(),
   questionHash: z.string(),
   paidWei: z.string(),
   askedTx: z.string(),
   status,
-  reason: z.string().nullable(),
-  answer: answer.nullable(),
-  votes: z.array(z.object({ model: z.string(), answer })).nullable(),
+  reason: z.nullable(z.string()),
+  answer: z.nullable(answer),
+  votes: z.nullable(z.array(z.object({ model: z.string(), answer }))),
   createdAt: z.string(),
   updatedAt: z.string(),
-  timeToConfirmMs: z.number().nullable(),
+  timeToConfirmMs: z.nullable(z.number()),
   models: z.array(
     z.object({
       model: z.string(),
       provider: z.string(),
-      publicKey: z.string().nullable(),
+      publicKey: z.nullable(z.string()),
       requestBody: z.string(),
-      responseBody: z.string().nullable(),
-      chatId: z.string().nullable(),
-      signatureHex: z.string().nullable(),
-      signedText: z.string().nullable(),
+      responseBody: z.nullable(z.string()),
+      chatId: z.nullable(z.string()),
+      signatureHex: z.nullable(z.string()),
+      signedText: z.nullable(z.string()),
       attempts: z.number(),
-      latencyMs: z.number().nullable(),
+      latencyMs: z.nullable(z.number()),
     }),
   ),
-  near: z.array(z.object({ txHash: z.string(), nonce: z.number(), ok: z.boolean().nullable(), createdAt: z.string() })),
-  base: z.array(z.object({ txHash: z.string(), status: z.string(), gasUsed: z.string().nullable(), sentAt: z.string() })),
+  near: z.array(z.object({ txHash: z.string(), nonce: z.number(), ok: z.nullable(z.boolean()), createdAt: z.string() })),
+  base: z.array(z.object({ txHash: z.string(), status: z.string(), gasUsed: z.nullable(z.string()), sentAt: z.string() })),
 });
 
 export const verifyPlanSchema = z.object({
   requestId: z.number(),
   available: z.boolean(),
-  reason: z.string().nullable(),
+  reason: z.nullable(z.string()),
   questionHash: z.string(),
-  steps: z.array(z.object({ title: z.string(), command: z.string(), expect: z.array(z.string()).optional() })),
+  steps: z.array(z.object({ title: z.string(), command: z.string(), expect: z.optional(z.array(z.string())) })),
 });
 
 export const modelSchema = z.object({
@@ -60,7 +60,7 @@ export const modelSchema = z.object({
   provider: z.string(),
   scheme: z.string(),
   publicKey: z.string(),
-  attestation: z.object({ url: z.string().url(), howTo: z.string() }).nullable(),
+  attestation: z.nullable(z.object({ url: z.url(), howTo: z.string() })),
 });
 
 export const statsSchema = z.object({
@@ -68,7 +68,7 @@ export const statsSchema = z.object({
   byStatus: z.record(z.string(), z.number()),
   answers: z.object({ YES: z.number(), NO: z.number(), UNKNOWN: z.number() }),
   answerShare: z.object({ YES: z.number(), NO: z.number(), UNKNOWN: z.number() }),
-  avgSecondsSeenToConfirmed: z.number().nullable(),
+  avgSecondsSeenToConfirmed: z.nullable(z.number()),
 });
 
 export const healthSchema = z.object({
@@ -79,7 +79,7 @@ export const healthSchema = z.object({
   errors: z.array(z.unknown()),
 });
 
-const pageMeta = z.object({ limit: z.number(), nextCursor: z.number().nullable() });
+const pageMeta = z.object({ limit: z.number(), nextCursor: z.nullable(z.number()) });
 
 export type RequestSummary = z.infer<typeof requestSummarySchema>;
 export type RequestDetail = z.infer<typeof requestDetailSchema>;
@@ -125,7 +125,7 @@ export interface Api {
 export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch): Api {
   const root = baseUrl.replace(/\/+$/, "");
 
-  async function get<T extends z.ZodType>(path: string, schema: T, allowMissing = false): Promise<z.infer<T> | null> {
+  async function get<T extends z.ZodMiniType>(path: string, schema: T, allowMissing = false): Promise<z.infer<T> | null> {
     const res = await fetchImpl(`${root}${path}`, { headers: { accept: "application/json" } });
     const body: unknown = await res.json().catch(() => null);
     if (res.status === 404 && allowMissing) return null;
@@ -138,7 +138,7 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch): Api
     return parsed.data;
   }
 
-  const one = <T extends z.ZodType>(schema: T) => z.object({ data: schema });
+  const one = <T extends z.ZodMiniType>(schema: T) => z.object({ data: schema });
 
   return {
     async request(id) {

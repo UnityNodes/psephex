@@ -1,7 +1,9 @@
 import { keccak256, parseEventLogs, stringToBytes, type Log } from "viem";
 import { disputeAbi } from "../abi.js";
-import type { Answer, RequestDetail } from "../api.js";
+import type { RequestDetail } from "../api.js";
 import { DISPUTE_ADDRESS } from "../deployment.js";
+
+export { ballots, type Ballot } from "./ballots.js";
 
 export interface CaseInfo {
   readonly claimant: string;
@@ -23,11 +25,6 @@ export interface Step {
   readonly detail: string | null;
 }
 
-export interface Ballot {
-  readonly model: string;
-  readonly vote: Answer | null;
-  readonly signed: boolean;
-}
 
 const TITLES: Readonly<Record<StepKey, string>> = {
   asked: "Question recorded on Base",
@@ -110,10 +107,6 @@ export function deriveProgress(input: { readonly detail: RequestDetail | null; r
   return { steps, outcome: outcomeOf(detail, caseInfo, input.winner ?? null) };
 }
 
-export function ballots(detail: RequestDetail): Ballot[] {
-  const votes = new Map((detail.votes ?? []).map((v) => [v.model, v.answer]));
-  return detail.models.map((m) => ({ model: m.model, vote: m.signatureHex !== null ? (votes.get(m.model) ?? null) : null, signed: m.signatureHex !== null }));
-}
 
 export function canRefund(caseInfo: CaseInfo | null, nowSeconds: bigint): boolean {
   if (!caseExists(caseInfo) || caseInfo.settled) return false;

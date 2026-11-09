@@ -7,7 +7,7 @@ import { Button } from "../components/ui/button.js";
 import { Skeleton } from "../components/ui/skeleton.js";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs.js";
 import { useRequestPages } from "../hooks.js";
-import { displayText } from "../lib/dispute.js";
+import { displayText } from "../lib/text.js";
 import { timeAgo, tookSeconds } from "../lib/format.js";
 
 export const STATUS_LABEL: Readonly<Record<RequestStatus, string>> = {

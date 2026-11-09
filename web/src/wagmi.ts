@@ -1,6 +1,7 @@
 import { createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { BASE_RPC_URL, CHAIN } from "./deployment.js";
+import { CHAIN } from "./chain.js";
+import { BASE_RPC_URL } from "./deployment.js";
 
 export const wagmiConfig = createConfig({
   chains: [CHAIN],

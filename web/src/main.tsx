@@ -1,14 +1,12 @@
 import { setNonce } from "get-nonce";
-import { MotionConfig } from "motion/react";
+import { domAnimation, LazyMotion, MotionConfig } from "motion/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
-import { WagmiProvider } from "wagmi";
 import { App } from "./App.js";
 import { ThemeProvider } from "./components/theme-provider.js";
 import "./index.css";
-import { wagmiConfig } from "./wagmi.js";
 
 if (__STYLE_NONCE__) setNonce(__STYLE_NONCE__);
 
@@ -20,13 +18,13 @@ createRoot(root).render(
   <StrictMode>
     <ThemeProvider defaultTheme="dark">
       <MotionConfig reducedMotion="user">
-        <WagmiProvider config={wagmiConfig}>
+        <LazyMotion features={domAnimation} strict>
           <QueryClientProvider client={queryClient}>
             <BrowserRouter>
               <App />
             </BrowserRouter>
           </QueryClientProvider>
-        </WagmiProvider>
+        </LazyMotion>
       </MotionConfig>
     </ThemeProvider>
   </StrictMode>,

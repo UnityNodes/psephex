@@ -1,6 +1,6 @@
 import { useId } from "react";
 import type { Answer } from "../api.js";
-import type { Ballot } from "../lib/steps.js";
+import type { Ballot } from "../lib/ballots.js";
 
 const COLOR: Readonly<Record<Answer, string>> = { YES: "var(--color-yes)", NO: "var(--color-no)", UNKNOWN: "var(--color-unknown)" };
 const TEXT_CLASS: Readonly<Record<Answer, string>> = { YES: "text-yes", NO: "text-no", UNKNOWN: "text-unknown" };

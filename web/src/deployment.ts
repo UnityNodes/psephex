@@ -1,6 +1,3 @@
-import { baseSepolia } from "viem/chains";
-
-export const CHAIN = baseSepolia;
 export { AIORACLE_ADDRESS, DISPUTE_ADDRESS, NEAR_ORACLE_CONTRACT, ORACLE_EVM_ADDRESS } from "./contracts.js";
 export const FAUCET_URL = "https://docs.base.org/get-started/get-funds";
 

@@ -1,11 +1,11 @@
-import { motion, useReducedMotion } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import { ArrowUpRight, Box, Coins, Cpu, ShieldCheck, Signature } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { Answer, RequestDetail } from "../api.js";
 import { explorer, ORACLE_EVM_ADDRESS } from "../deployment.js";
-import { displayText } from "../lib/dispute.js";
-import { ballots, type Ballot } from "../lib/steps.js";
+import { ballots, type Ballot } from "../lib/ballots.js";
+import { displayText } from "../lib/text.js";
 import { BallotDisc } from "./Ballots.js";
 import { BorderBeam } from "./ui/border-beam.js";
 
@@ -30,7 +30,7 @@ function TxLink({ href, children }: { href: string | null; children: ReactNode }
 function Node({ index, icon, where, title, children }: { index: number; icon: ReactNode; where: string; title: string; children: ReactNode }) {
   const still = useReducedMotion() === true;
   return (
-    <motion.li
+    <m.li
       initial={still ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: EASE, delay: 0.15 + index * STEP_DELAY }}
@@ -42,7 +42,7 @@ function Node({ index, icon, where, title, children }: { index: number; icon: Re
         <h3 className="m-0 font-display text-lg leading-tight font-bold">{title}</h3>
       </div>
       <div className="flex min-w-0 flex-col gap-2 text-sm text-muted">{children}</div>
-    </motion.li>
+    </m.li>
   );
 }
 
@@ -51,8 +51,8 @@ function Track() {
   const grow = { duration: 1.4, ease: EASE, delay: 0.15 };
   return (
     <>
-      <motion.span aria-hidden="true" initial={still ? false : { scaleY: 0 }} animate={{ scaleY: 1 }} transition={grow} className="absolute top-4 bottom-4 left-[17px] w-px origin-top bg-gradient-to-b from-bronze via-bronze/60 to-bronze lg:hidden" />
-      <motion.span aria-hidden="true" initial={still ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={grow} className="absolute top-[17px] right-4 left-4 hidden h-px origin-left bg-gradient-to-r from-bronze via-bronze/60 to-bronze lg:block" />
+      <m.span aria-hidden="true" initial={still ? false : { scaleY: 0 }} animate={{ scaleY: 1 }} transition={grow} className="absolute top-4 bottom-4 left-[17px] w-px origin-top bg-gradient-to-b from-bronze via-bronze/60 to-bronze lg:hidden" />
+      <m.span aria-hidden="true" initial={still ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={grow} className="absolute top-[17px] right-4 left-4 hidden h-px origin-left bg-gradient-to-r from-bronze via-bronze/60 to-bronze lg:block" />
     </>
   );
 }
@@ -63,7 +63,7 @@ function Votes({ list }: { list: readonly Ballot[] }) {
   return (
     <ul className="m-0 flex list-none gap-3 p-0">
       {slots.map((b, i) => (
-        <motion.li
+        <m.li
           key={b?.model ?? i}
           initial={still ? false : { opacity: 0, y: -14, rotate: -8 }}
           animate={{ opacity: 1, y: 0, rotate: 0 }}
@@ -73,7 +73,7 @@ function Votes({ list }: { list: readonly Ballot[] }) {
           <BallotDisc vote={b?.vote ?? null} size={40} drop={false} />
           <span className="w-full truncate text-[11px] text-ink">{b ? short(b.model) : "Waiting"}</span>
           <span className="text-[11px]">{b?.vote ?? "no vote"}</span>
-        </motion.li>
+        </m.li>
       ))}
     </ul>
   );

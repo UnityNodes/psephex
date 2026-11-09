@@ -13,8 +13,10 @@ import { Badge } from "../components/ui/badge.js";
 import { Button } from "../components/ui/button.js";
 import { shortAddress } from "../components/Wallet.js";
 import { STATUS_LABEL } from "./RecentDisputes.js";
-import { CHAIN, DISPUTE_ADDRESS, explorer } from "../deployment.js";
-import { useCase, useChainQuestionHash, usePageTitle, useRequestDetail, useSettlementWinner, useVerifyPlan } from "../hooks.js";
+import { CHAIN } from "../chain.js";
+import { DISPUTE_ADDRESS, explorer } from "../deployment.js";
+import { useCase, useChainQuestionHash, useSettlementWinner } from "../chain-hooks.js";
+import { usePageTitle, useRequestDetail, useVerifyPlan } from "../hooks.js";
 import { describeTxError, displayText } from "../lib/dispute.js";
 import { ballots, canRefund, deriveProgress, questionMatchesChain, type CaseInfo, type Outcome, type StepKey } from "../lib/steps.js";
 

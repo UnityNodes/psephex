@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import { Box, Check, Coins, Cpu, ShieldCheck, Signature, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -19,7 +19,7 @@ function Reveal({ children, className, delay = 0 }: { children: ReactNode; class
   const still = useReducedMotion() === true || typeof IntersectionObserver === "undefined";
   if (still) return <div className={className}>{children}</div>;
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 18 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.15 }}
@@ -27,7 +27,7 @@ function Reveal({ children, className, delay = 0 }: { children: ReactNode; class
       className={className}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -275,13 +275,9 @@ export function Landing() {
           <LiveNumbers />
           <HowItWorks />
           <div id="proof" className="scroll-mt-6">
-            <Reveal>
-              <Limits />
-            </Reveal>
+            <Limits />
           </div>
-          <Reveal>
-            <ForDevelopers />
-          </Reveal>
+          <ForDevelopers />
         </main>
 
         <SiteFooter />
