@@ -12,9 +12,9 @@ import { ballots } from "../lib/steps.js";
 const STEPS: readonly { title: string; body: string; where: string }[] = [
   { where: "Base", title: "Base records the question", body: "A contract calls AiOracle.ask with a yes-or-no question and the 0.0001 ETH fee. Base stores the hash of the question." },
   {
-    where: "NEAR AI Cloud",
+    where: "NEAR AI and Phala",
     title: "Three models answer in TEEs",
-    body: "The relayer sends the exact request the NEAR contract built to Qwen3.8, DeepSeek V4.1 and Qwen3.6. Each signs its answer with a key that never leaves its enclave.",
+    body: "The relayer sends the exact request the NEAR contract built to DeepSeek V4.1 and Qwen3.6 on NEAR AI and to Gemma 4 on Phala. Every answer is signed inside a TEE.",
   },
   { where: "NEAR", title: "NEAR checks two of three", body: "oracle.psephex.testnet rebuilds the request, checks every signature against the registered keys and needs two matching answers." },
   { where: "NEAR MPC", title: "NEAR MPC signs for Base", body: "The contract asks NEAR Chain Signatures to sign the Base transaction. Nobody holds the oracle's EVM key." },
@@ -22,7 +22,7 @@ const STEPS: readonly { title: string; body: string; where: string }[] = [
 ];
 
 const PROVES: readonly string[] = [
-  "Each answer was produced and signed by a model whose key is registered on NEAR and attested to run in a TEE.",
+  "Each answer was signed inside a TEE by a key registered on NEAR and attested with a fresh nonce: the model's own key on NEAR AI, the gateway's key on Phala.",
   "At least two of the three signed answers agree. The NEAR contract checks this, not our server.",
   "The models saw the request the NEAR contract built from the question on Base, with temperature 0 and a fixed seed inside the signed request.",
   "Only the MPC-derived address can deliver the answer, and only for the matching id and question. There is no bridge and no oracle key on a server.",
@@ -141,7 +141,7 @@ function Limits() {
             all three models said 9 is a prime number, and the oracle delivered that.
           </li>
           <li>That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.</li>
-          <li>Independent operators. All three models run with one provider, NEAR AI. A second provider, Phala, is planned.</li>
+          <li>Fully independent operators. Two models run on NEAR AI and one on Phala, and on Phala one attested gateway signs for the model it routes to, so you trust that gateway.</li>
           <li>Knowledge of fresh events. Put the evidence in the question itself.</li>
           <li>A fixed set of models. The owner of the NEAR contract can change it.</li>
         </ul>

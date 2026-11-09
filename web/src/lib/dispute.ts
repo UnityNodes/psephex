@@ -45,7 +45,7 @@ export const EXAMPLES: readonly Example[] = [
     label: "A matter of taste",
     expected: "UNKNOWN",
     question: "The task was: write a good logo. The claimant delivered a blue logo. The counterparty says it is ugly. Was the task completed?",
-    evidence: "Two models answered UNKNOWN and one NO in 10 of 10 checks",
+    evidence: "Two models answered UNKNOWN and one YES in 10 of 10 checks",
   },
 ];
 

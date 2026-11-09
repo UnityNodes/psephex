@@ -60,7 +60,7 @@ describe("Landing", () => {
     const limits = screen.getByRole("region", { name: "What a verdict does not prove" });
     expect(limits).toHaveTextContent(/9 is a prime number/);
     expect(within(limits).getByRole("link", { name: "dispute #2" })).toHaveAttribute("href", "/app/r/2");
-    expect(limits).toHaveTextContent(/one provider/);
+    expect(limits).toHaveTextContent(/one on Phala/);
     expect(screen.getByRole("region", { name: "What a verdict proves" })).toHaveTextContent(/80 of 80/);
   });
 
