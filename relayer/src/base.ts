@@ -55,6 +55,10 @@ export class BaseChain implements BaseChainPort {
     return this.#client.getBlockNumber({ cacheTime: 0 });
   }
 
+  async balance(address: Address): Promise<bigint> {
+    return this.#client.getBalance({ address, blockTag: "latest" });
+  }
+
   async askedEvents(fromBlock: bigint, toBlock: bigint): Promise<AskedEvent[]> {
     const logs = await this.#client.getLogs({ address: this.#aiOracle, event: askedEvent, fromBlock, toBlock, strict: true });
     return logs.map((log) => {

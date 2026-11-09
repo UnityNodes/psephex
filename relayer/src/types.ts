@@ -11,6 +11,8 @@ export type RequestStatus =
   | "rejected"
   | "failed";
 
+export const REQUEST_STATUSES: readonly RequestStatus[] = ["seen", "answering", "verified", "near_sent", "near_signed", "base_sent", "confirmed", "rejected", "failed"];
+
 export const TERMINAL_STATUSES: readonly RequestStatus[] = ["confirmed", "rejected", "failed"];
 
 export interface AskedEvent {

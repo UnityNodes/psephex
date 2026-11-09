@@ -26,10 +26,10 @@ function scrubValue(value: unknown, scrub: (text: string) => string): unknown {
   return value;
 }
 
-export function createLogger(level: string, destination?: DestinationStream, secrets: readonly string[] = []): Log {
+export function createLogger(level: string, destination?: DestinationStream, secrets: readonly string[] = [], service = "psephex-relayer"): Log {
   const options = {
     level,
-    base: { service: "psephex-relayer" },
+    base: { service },
     redact: { paths: REDACT, censor: "[redacted]" },
     timestamp: pino.stdTimeFunctions.isoTime,
   };

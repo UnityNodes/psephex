@@ -67,6 +67,8 @@ const MIGRATIONS: readonly string[] = [
   `,
 ];
 
+export const SCHEMA_VERSION = MIGRATIONS.length;
+
 export interface RequestPatch {
   readonly status?: RequestStatus;
   readonly reason?: string | null;
@@ -105,7 +107,7 @@ export interface BaseTxRow extends NewBaseTx {
   readonly sentAt: number;
 }
 
-interface RequestDbRow {
+export interface RequestDbRow {
   id: number;
   requester: string;
   origin: string | null;
@@ -122,7 +124,7 @@ interface RequestDbRow {
   updated_at: number;
 }
 
-interface ModelDbRow {
+export interface ModelDbRow {
   request_id: number;
   model: string;
   provider: string;
@@ -135,7 +137,7 @@ interface ModelDbRow {
   latency_ms: number | null;
 }
 
-interface NearDbRow {
+export interface NearDbRow {
   request_id: number;
   tx_hash: string;
   nonce: number;
@@ -148,7 +150,7 @@ interface NearDbRow {
   created_at: number;
 }
 
-interface BaseDbRow {
+export interface BaseDbRow {
   request_id: number;
   tx_hash: string;
   signed_tx: string;
@@ -158,7 +160,7 @@ interface BaseDbRow {
   sent_at: number;
 }
 
-const TERMINAL = "('confirmed','rejected','failed')";
+export const TERMINAL = "('confirmed','rejected','failed')";
 
 const PATCH_COLUMNS: Readonly<Record<keyof RequestPatch, string>> = {
   status: "status",
@@ -169,7 +171,7 @@ const PATCH_COLUMNS: Readonly<Record<keyof RequestPatch, string>> = {
   origin: "origin",
 };
 
-function toRequest(r: RequestDbRow): RequestRow {
+export function toRequest(r: RequestDbRow): RequestRow {
   return {
     id: r.id,
     requester: r.requester,
@@ -188,7 +190,7 @@ function toRequest(r: RequestDbRow): RequestRow {
   };
 }
 
-function toModel(r: ModelDbRow): ModelAnswerRow {
+export function toModel(r: ModelDbRow): ModelAnswerRow {
   return {
     requestId: r.request_id,
     model: r.model,
@@ -203,7 +205,7 @@ function toModel(r: ModelDbRow): ModelAnswerRow {
   };
 }
 
-function toNear(r: NearDbRow): NearTxRow {
+export function toNear(r: NearDbRow): NearTxRow {
   return {
     requestId: r.request_id,
     txHash: r.tx_hash,
@@ -218,7 +220,7 @@ function toNear(r: NearDbRow): NearTxRow {
   };
 }
 
-function toBase(r: BaseDbRow): BaseTxRow {
+export function toBase(r: BaseDbRow): BaseTxRow {
   return {
     requestId: r.request_id,
     txHash: r.tx_hash,

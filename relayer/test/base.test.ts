@@ -110,6 +110,12 @@ describe("BaseChain", () => {
     expect(JSON.parse(receipt?.eventsJson ?? "[]")).toEqual([{ event: "Fulfilled", args: { id: "7", answer: 1 } }]);
   });
 
+  it("reads an address balance at the latest block", async () => {
+    const { base, calls } = chain({ eth_getBalance: () => "0x3e8" });
+    expect(await base.balance(DISPUTE)).toBe(1000n);
+    expect(calls[0]?.params).toEqual([DISPUTE, "latest"]);
+  });
+
   it("reads the AiOracle fee", async () => {
     const { base } = chain({ eth_call: () => encodeAbiParameters([{ type: "uint256" }], [100_000_000_000_000n]) });
     expect(await base.fee()).toBe(100_000_000_000_000n);

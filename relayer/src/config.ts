@@ -32,20 +32,20 @@ export class ConfigError extends Error {
   override readonly name = "ConfigError";
 }
 
-type Env = Readonly<Record<string, string | undefined>>;
+export type Env = Readonly<Record<string, string | undefined>>;
 
-function required(env: Env, key: string): string {
+export function required(env: Env, key: string): string {
   const value = env[key]?.trim();
   if (!value) throw new ConfigError(`${key} is required`);
   return value;
 }
 
-function optional(env: Env, key: string, fallback: string): string {
+export function optional(env: Env, key: string, fallback: string): string {
   const value = env[key]?.trim();
   return value ? value : fallback;
 }
 
-function positiveInt(env: Env, key: string, fallback: number): number {
+export function positiveInt(env: Env, key: string, fallback: number): number {
   const raw = optional(env, key, String(fallback));
   if (!/^\d+$/.test(raw)) throw new ConfigError(`${key} must be a positive integer, got "${raw}"`);
   const value = Number(raw);
@@ -59,13 +59,13 @@ function nonNegativeBigInt(env: Env, key: string, fallback: string): bigint {
   return BigInt(raw);
 }
 
-function address(env: Env, key: string): Address {
+export function address(env: Env, key: string): Address {
   const raw = required(env, key);
   if (!isAddress(raw, { strict: false })) throw new ConfigError(`${key} is not an EVM address`);
   return getAddress(raw);
 }
 
-function serviceUrl(env: Env, key: string, fallback?: string): string {
+export function serviceUrl(env: Env, key: string, fallback?: string): string {
   const raw = fallback === undefined ? required(env, key) : optional(env, key, fallback);
   let url: URL;
   try {

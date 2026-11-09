@@ -11,10 +11,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "api": "node dist/api/main.js"
   },
   "dependencies": {
+    "@fastify/rate-limit": "11.2.1",
     "better-sqlite3": "13.0.3",
+    "fastify": "5.12.8",
     "near-api-js": "7.4.0",
     "pino": "10.4.0",
     "viem": "2.57.16"

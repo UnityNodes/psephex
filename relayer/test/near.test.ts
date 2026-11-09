@@ -75,7 +75,7 @@ class FakeRpc implements NearRpc {
 }
 
 function oracle(rpc: FakeRpc): NearOracle {
-  return new NearOracle({ rpc, contractId: "oracle.psephex.testnet", relayerId: "relayer.psephex.testnet", signer: null, fulfillGasTera: 200, timeoutMs: 1000 });
+  return new NearOracle({ rpc, contractId: "oracle.psephex.testnet", relayerId: "relayer.psephex.testnet", signer: null, timeoutMs: 1000 });
 }
 
 describe("NearOracle views", () => {
@@ -147,7 +147,7 @@ describe("NearOracle transactions", () => {
     const rpc = new FakeRpc();
     rpc.sendError = new Error("send_tx timed out");
     const signed = { txHash: "h", signedTxBase64: "AA==" };
-    const n = new NearOracle({ rpc, contractId: "c", relayerId: "r", signer: null, fulfillGasTera: 200, timeoutMs: 1000, decode: () => ({}) });
+    const n = new NearOracle({ rpc, contractId: "c", relayerId: "r", signer: null, timeoutMs: 1000, decode: () => ({}) });
     expect(await n.sendSigned(signed)).toEqual({ kind: "unknown" });
     rpc.sendError = new Error("InvalidNonce");
     expect(await n.sendSigned(signed)).toEqual({ kind: "invalid", error: "InvalidNonce" });
@@ -162,7 +162,7 @@ describe("NearOracle transactions", () => {
   it("reads the permission of the relayer key", async () => {
     const rpc = new FakeRpc();
     const signer = { sign: async () => ({ txHash: "h", signedTxBase64: "" }), publicKey: async () => "ed25519:PUB" };
-    const n = new NearOracle({ rpc, contractId: "c", relayerId: "relayer.psephex.testnet", signer, fulfillGasTera: 200, timeoutMs: 1000 });
+    const n = new NearOracle({ rpc, contractId: "c", relayerId: "relayer.psephex.testnet", signer, timeoutMs: 1000 });
     expect(await n.relayerKeyPermission()).toBe("FullAccess");
     expect(rpc.keyQuery).toEqual({ accountId: "relayer.psephex.testnet", publicKey: "ed25519:PUB" });
     await expect(oracle(rpc).relayerKeyPermission()).rejects.toThrow(/key/);

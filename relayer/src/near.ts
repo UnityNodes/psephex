@@ -43,7 +43,6 @@ export interface NearOracleOptions {
   readonly contractId: string;
   readonly relayerId: string;
   readonly signer: FulfillSigner | null;
-  readonly fulfillGasTera: number;
   readonly timeoutMs: number;
   readonly decode?: (bytes: Uint8Array) => unknown;
 }

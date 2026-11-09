@@ -39,7 +39,6 @@ function build(config: RelayerConfig, log: Log): Services {
     contractId: config.nearOracleContract,
     relayerId: config.nearRelayerAccount,
     signer,
-    fulfillGasTera: config.fulfillGasTera,
     timeoutMs: NEAR_TIMEOUT_MS,
   });
   const base = new BaseChain({ url: config.baseRpcUrl, aiOracle: config.aiOracleAddress, chainId: config.baseChainId });
