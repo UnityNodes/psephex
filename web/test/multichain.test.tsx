@@ -10,7 +10,7 @@ import { ChainBadge } from "../src/components/ChainBadge.js";
 import { explorer, NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT } from "../src/deployment.js";
 import { BASE } from "../src/evm-chains.js";
 import { ApiProvider } from "../src/hooks.js";
-import { describeNearError, formatNear, nearDepositTotal, OPEN_DISPUTE_GAS, parseNear, requestIdFrom, validateNearDispute } from "../src/lib/near-dispute.js";
+import { describeNearError, formatNear, nearDepositTotal, roundedAmount, OPEN_DISPUTE_GAS, parseNear, requestIdFrom, validateNearDispute } from "../src/lib/near-dispute.js";
 import { statusLabel } from "../src/lib/status.js";
 import { deriveProgress, stepOrder } from "../src/lib/steps.js";
 import { caseInfoFrom, checkNearPrices, type NearCase } from "../src/near/hooks.js";
@@ -177,6 +177,13 @@ describe("NEAR deposit", () => {
     await user.click(screen.getByRole("button", { name: "Open dispute" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/The deposit changed to/);
     expect(wallet.call).not.toHaveBeenCalled();
+  });
+
+  it("rounds amounts shown after a payout and keeps exact ones exact", () => {
+    expect(roundedAmount(21309999999999996000000n, 24, "NEAR")).toBe("about 0.02131 NEAR");
+    expect(roundedAmount(10n ** 23n, 24, "NEAR")).toBe("0.1 NEAR");
+    expect(roundedAmount(10n ** 15n, 18, "ETH")).toBe("0.001 ETH");
+    expect(roundedAmount(1n, 18, "ETH")).toBe("about 0 ETH");
   });
 
   it("refuses deposits from the RPC outside the contract limits", () => {

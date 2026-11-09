@@ -1,8 +1,7 @@
-import { formatEther } from "viem";
 import type { RequestDetail } from "../api.js";
 import { shortAccount } from "../components/NearAccount.js";
 import { shortAddress } from "../components/Wallet.js";
-import { formatNear } from "../lib/near-dispute.js";
+import { roundedAmount } from "../lib/near-dispute.js";
 import type { CaseInfo, Outcome } from "../lib/steps.js";
 import { EXPLORER_NAME, SOURCE_SHORT, type Source } from "../sources.js";
 
@@ -11,7 +10,7 @@ function party(source: Source, who: string): string {
 }
 
 export function outcomeText(outcome: Outcome, caseInfo: CaseInfo | null, detail: RequestDetail | null, now: bigint, source: Source = "base"): string {
-  const stake = caseInfo ? (source === "near" ? `${formatNear(caseInfo.amount)} NEAR` : `${formatEther(caseInfo.amount)} ETH`) : "The stake";
+  const stake = caseInfo ? (source === "near" ? roundedAmount(caseInfo.amount, 24, "NEAR") : roundedAmount(caseInfo.amount, 18, "ETH")) : "The stake";
   switch (outcome) {
     case "claimant":
       return `YES. ${stake} went back to the claimant ${caseInfo ? party(source, caseInfo.claimant) : ""}.`;

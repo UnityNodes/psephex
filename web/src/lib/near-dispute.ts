@@ -39,6 +39,20 @@ export function formatNear(yocto: bigint): string {
   return formatUnits(yocto, NEAR_DECIMALS);
 }
 
+const SHOWN_PLACES = 5;
+
+/**
+ * A stake left over after storage is charged can carry twenty digits of yocto, which reads as
+ * noise in a sentence about a payout. Amounts the user signs stay exact; amounts shown after the
+ * fact are rounded to five places and marked "about" when rounding changed them.
+ */
+export function roundedAmount(value: bigint, decimals: number, unit: string): string {
+  const scale = 10n ** BigInt(decimals - SHOWN_PLACES);
+  const rounded = ((value + scale / 2n) / scale) * scale;
+  const text = `${formatUnits(rounded, decimals)} ${unit}`;
+  return rounded === value ? text : `about ${text}`;
+}
+
 export function parseNear(text: string): bigint | null {
   const raw = text.trim();
   return DECIMAL.test(raw) ? parseUnits(raw, NEAR_DECIMALS) : null;
