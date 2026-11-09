@@ -25,6 +25,8 @@ const RESIGN_PANICS = /max_fee_per_gas above cap|max_priority_fee_per_gas above 
 const SIGNING_IN_PROGRESS = /request signing in progress/;
 const ANSWER_CODES: Readonly<Record<string, number>> = { UNKNOWN: 0, YES: 1, NO: 2 };
 
+export const ALREADY_FULFILLED = "already fulfilled on Base";
+
 export interface Log {
   info(obj: object, msg: string): void;
   warn(obj: object, msg: string): void;
@@ -174,7 +176,7 @@ export class Processor {
     if (!req.origin) repo.updateRequest(req.id, { origin });
     const bytes = Buffer.byteLength(req.question, "utf8");
     if (bytes > settings.maxQuestionBytes) return this.#end(req, "rejected", `question too long: ${bytes} bytes, max ${settings.maxQuestionBytes}`);
-    if (await base.isFulfilledOnBase(BigInt(req.id))) return this.#end(req, "rejected", "already fulfilled on Base");
+    if (await base.isFulfilledOnBase(BigInt(req.id))) return this.#end(req, "rejected", ALREADY_FULFILLED);
     if (await near.isFulfilled(req.id)) return this.#end(req, "failed", "fulfilled in NEAR without a local record");
     const recent = repo.countOriginBefore(origin, req.id, clock.now() - HOUR_MS);
     if (recent >= settings.perAddressHourlyLimit) return this.#end(req, "rejected", `rate limit: ${recent} requests from ${origin} in the last hour`);
