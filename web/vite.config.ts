@@ -16,6 +16,11 @@ const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
  * A production bundle that silently falls back to a localhost API looks fine in review and breaks
  * for every visitor, so a build refuses to run without an explicit https API address.
  */
+/**
+ * Several NEAR wallet modules (HERE, HOT, NEAR Mobile and their SDKs) read Node's `global` when
+ * they load, which browsers do not have, so the whole wallet chunk failed with a ReferenceError
+ * and no wallet could connect. The `global` define in the config below maps it to `globalThis`.
+ */
 function requireApiUrl(raw: string | undefined): string {
   if (!raw) throw new Error("VITE_API_URL is required for a build, for example https://api.psephex.example");
   const url = new URL(raw);
@@ -55,6 +60,16 @@ function connectOrigins(env: Record<string, string>): string[] {
   return [...new Set(origins)];
 }
 
+/**
+ * NEAR wallets that do not open their own window talk to their backend or embed their signer.
+ * These origins were taken from blocked requests in a real browser, one wallet at a time, so
+ * the policy names each wallet's service instead of opening connect-src or frame-src wide. NEAR
+ * Mobile's backend host contains an underscore, which a CSP host source cannot spell, so only a
+ * wildcard on its parent domain reaches it.
+ */
+const WALLET_CONNECT_ORIGINS = ["https://h4n.app", "https://*.peersyst.tech"];
+const WALLET_FRAME_ORIGINS = ["https://hot-labs.org", "https://my.herewallet.app", "https://wallet.intear.tech", "https://*.peersyst.tech"];
+
 function contentSecurityPolicy(origins: readonly string[]): Plugin {
   const policy = [
     "default-src 'self'",
@@ -62,7 +77,8 @@ function contentSecurityPolicy(origins: readonly string[]): Plugin {
     `style-src 'self' 'nonce-${STYLE_NONCE}'`,
     "img-src 'self' data:",
     "font-src 'self'",
-    `connect-src 'self' ${origins.join(" ")}`,
+    `connect-src 'self' ${[...origins, ...WALLET_CONNECT_ORIGINS].join(" ")}`,
+    `frame-src ${WALLET_FRAME_ORIGINS.join(" ")}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
@@ -81,8 +97,13 @@ export default defineConfig(({ command, mode }) => {
   if (command === "build") plugins.push(contentSecurityPolicy(connectOrigins(env)));
   return {
     plugins,
-    define: { __STYLE_NONCE__: JSON.stringify(command === "build" ? STYLE_NONCE : "") },
-    resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+    define: { __STYLE_NONCE__: JSON.stringify(command === "build" ? STYLE_NONCE : ""), global: "globalThis" },
+    resolve: {
+      alias: [
+        { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
+        { find: /^crypto$/, replacement: fileURLToPath(new URL("./src/near/node-crypto.ts", import.meta.url)) },
+      ],
+    },
     build: { target: "es2022", sourcemap: false },
     server: { fs: { allow: [".", "../contracts/base/src/examples"] } },
     test: {

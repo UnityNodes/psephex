@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useConfig, useConnection, useWriteContract } from "wagmi";
 import { simulateContract, waitForTransactionReceipt } from "wagmi/actions";
 import { disputeAbi } from "../abi.js";
@@ -68,8 +68,6 @@ export function NearRefundButton({ id, onDone }: { id: number; onDone: () => voi
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const account = wallet.accountId;
-  const { prepare } = wallet;
-  useEffect(prepare, [prepare]);
 
   async function handleRefund() {
     if (!account) return;

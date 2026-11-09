@@ -82,6 +82,7 @@ const CONTRACT_ERRORS: readonly (readonly [RegExp, string])[] = [
   [/already settled/i, "This dispute is already settled."],
   [/unknown dispute/i, "There is no NEAR dispute with this number."],
   [/closed the window|user rejected|rejected/i, "You closed the wallet without signing."],
+  [/not injected|not installed|extension/i, "This wallet's browser extension is not installed here. Install it, or pick another wallet."],
   [/popup window blocked/i, "The browser blocked the wallet window. Allow pop-ups for this site and try again."],
   [/not enough balance|NotEnoughBalance|LackBalanceForState/i, "Not enough testnet NEAR for the deposit and gas. Get test NEAR from a faucet and try again."],
 ];

@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { SelectorWallet } from "./selector.js";
+import type { SelectorWallet, WalletOption } from "./selector.js";
+import { WalletPicker } from "./WalletPicker.js";
 import { NearWalletContext, type NearWallet, type NearWalletStatus } from "./wallet.js";
 
 const SESSION_KEYS = ["near-wallet-selector:selectedWalletId", "signedAccountId"];
@@ -24,6 +25,11 @@ function SelectorProvider({ children }: { children: ReactNode }) {
   const [accountId, setAccountId] = useState<string | null>(null);
   const loading = useRef<Promise<SelectorWallet> | null>(null);
   const unsubscribe = useRef<(() => void) | null>(null);
+  const [picker, setPicker] = useState<{ options: readonly WalletOption[]; resolve: (id: string | null) => void; reject: (err: unknown) => void } | null>(null);
+
+  function choose(s: SelectorWallet): Promise<string | null> {
+    return new Promise((resolve, reject) => setPicker({ options: s.wallets(), resolve, reject }));
+  }
 
   function load(): Promise<SelectorWallet> {
     if (!loading.current) {
@@ -58,7 +64,8 @@ function SelectorProvider({ children }: { children: ReactNode }) {
       prepare: () => void load().catch(() => undefined),
       connect: async () => {
         const s = await load();
-        await s.connect();
+        const id = await choose(s);
+        if (id === null) return;
         setAccountId(s.accountId());
       },
       disconnect: async () => {
@@ -70,7 +77,33 @@ function SelectorProvider({ children }: { children: ReactNode }) {
     [selector, status, accountId],
   );
 
-  return <NearWalletContext.Provider value={value}>{children}</NearWalletContext.Provider>;
+  /**
+   * The picker closes before the wallet opens, so the wallet's own overlay is not covered by a
+   * modal dialog; a refusal or error goes back to whoever asked to connect and is shown there.
+   */
+  async function pick(id: string) {
+    const pending = picker;
+    setPicker(null);
+    try {
+      const s = await load();
+      await s.connect(id);
+      pending?.resolve(id);
+    } catch (err) {
+      pending?.reject(err);
+    }
+  }
+
+  function cancel() {
+    picker?.resolve(null);
+    setPicker(null);
+  }
+
+  return (
+    <NearWalletContext.Provider value={value}>
+      {children}
+      <WalletPicker open={picker !== null} options={picker?.options ?? []} onPick={pick} onCancel={cancel} />
+    </NearWalletContext.Provider>
+  );
 }
 
 export function NearWalletProvider({ children }: { children: ReactNode }) {

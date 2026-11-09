@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { NearAccount } from "../components/NearAccount.js";
 import { Button } from "../components/ui/button.js";
@@ -50,8 +50,6 @@ export function NearDisputeForm() {
   const stake = parseNear(stakeNear);
   const total = stake !== null && prices.data ? nearDepositTotal({ stake, ...prices.data }) : null;
   const canSubmit = accountId ? config.data !== undefined : canConnect(wallet);
-  const { prepare } = wallet;
-  useEffect(prepare, [prepare]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -191,7 +189,7 @@ export function NearDisputeForm() {
         )}
         {total === null && question.trim().length === 0 && <p className="m-0 text-sm text-muted">Write the question to price the deposit; it grows with the question length.</p>}
         {(config.isError || prices.isError) && <p className="m-0 text-sm text-no">Could not read the dispute contract on NEAR testnet. Reload the page.</p>}
-        <Button type="submit" size="lg" disabled={busy || !canSubmit} className="self-start">
+        <Button type="submit" size="lg" disabled={busy || !canSubmit} onPointerEnter={wallet.prepare} onFocus={wallet.prepare} className="self-start">
           {accountId ? PHASE_LABEL[phase] : "Connect NEAR to open"}
         </Button>
         <p className="m-0 text-xs text-muted">

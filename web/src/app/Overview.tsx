@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams } from "react-router";
 import { Button } from "../components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog.js";
@@ -12,11 +13,25 @@ import { MetricsStrip } from "./MetricsStrip.js";
 
 type Overlay = "none" | "new" | "detail";
 
+/**
+ * NEAR wallets such as HOT, HERE, Intear and NEAR Mobile draw their sign-in screen as an overlay
+ * on the page. A modal Radix dialog turns off pointer events and traps focus outside itself, so
+ * those overlays showed up but could not be clicked or typed into. The dispute dialog and the
+ * dispute sheet are therefore non-modal, with their own backdrop and Escape and close button.
+ */
+function Backdrop({ onClose }: { onClose: () => void }) {
+  return createPortal(<div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-40 bg-black/50 animate-in fade-in-0" />, document.body);
+}
+
+const keepOpenOnOutsideClick = (event: Event) => event.preventDefault();
+
 function NewDisputeDialog() {
   const navigate = useNavigate();
+  const close = () => navigate("/app");
   return (
-    <Dialog open onOpenChange={(open) => !open && navigate("/app")}>
-      <DialogContent className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] overflow-y-auto border-line bg-paper sm:max-w-2xl">
+    <Dialog open modal={false} onOpenChange={(open) => !open && close()}>
+      <Backdrop onClose={close} />
+      <DialogContent onInteractOutside={keepOpenOnOutsideClick} className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] overflow-y-auto border-line bg-paper sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl font-bold">Open a dispute</DialogTitle>
           <DialogDescription>Stake test NEAR on NEAR testnet, or test ETH on an EVM testnet. Three models answer, NEAR checks that two agree, and the dispute contract pays out.</DialogDescription>
@@ -33,8 +48,9 @@ function DetailSheet() {
   const id = params.id ?? "";
   const source = params.source && isSource(params.source) ? SOURCE_NAME[params.source] : "";
   return (
-    <Sheet open onOpenChange={(open) => !open && navigate("/app")}>
-      <SheetContent side="right" className="w-full overflow-y-auto border-line bg-stone p-6 sm:max-w-3xl sm:p-8">
+    <Sheet open modal={false} onOpenChange={(open) => !open && navigate("/app")}>
+      <Backdrop onClose={() => navigate("/app")} />
+      <SheetContent side="right" onInteractOutside={keepOpenOnOutsideClick} className="w-full overflow-y-auto border-line bg-stone p-6 sm:max-w-3xl sm:p-8">
         <SheetTitle className="sr-only">{`Dispute #${id}`}</SheetTitle>
         <SheetDescription className="sr-only">{`Votes, the path through ${source || "the chains"} and NEAR, and commands to check it yourself`}</SheetDescription>
         <RequestPage />
