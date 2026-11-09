@@ -31,7 +31,7 @@ export function ModelEntry({ m }: { m: ModelView }) {
             onClick={() => setNonce(nonce ?? randomNonce())}
             onFocus={() => setNonce((n) => n ?? randomNonce())}
             onMouseEnter={() => setNonce((n) => n ?? randomNonce())}
-            className="self-start underline underline-offset-2 hover:text-bronze"
+            className="self-start underline underline-offset-2 hover:text-bronze-text"
           >
             Fetch a fresh TEE attestation
           </a>

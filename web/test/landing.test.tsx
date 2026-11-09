@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { createApi, type Api } from "../src/api.js";
 import { optionalHttpsUrl } from "../src/deployment.js";
+import { ThemeProvider } from "../src/components/theme-provider.js";
 import { ApiProvider } from "../src/hooks.js";
 import { Landing } from "../src/pages/Landing.js";
 import { evidence } from "./fixtures.js";
@@ -25,13 +26,15 @@ const LIVE = {
 function renderLanding(files: Record<string, unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
+    <ThemeProvider>
     <ApiProvider value={api(files)}>
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <Landing />
         </MemoryRouter>
       </QueryClientProvider>
-    </ApiProvider>,
+    </ApiProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -67,7 +70,7 @@ describe("Landing", () => {
   it("shows live numbers and the latest verdict from the API", async () => {
     renderLanding(LIVE);
     const numbers = await screen.findByRole("region", { name: "Live on Base Sepolia" });
-    expect(await within(numbers).findByText(/7 disputes/)).toBeInTheDocument();
+    await waitFor(() => expect(numbers).toHaveTextContent(/7 disputes/));
     expect(numbers).toHaveTextContent(/5 answered on Base/);
     expect(numbers).toHaveTextContent(/3 YES, 1 NO and 1 UNKNOWN/);
     const latest = await screen.findByRole("region", { name: "Latest verdict" });

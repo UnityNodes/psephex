@@ -27,7 +27,7 @@ const FILTERS: readonly { value: RequestStatus | ""; label: string }[] = [
 export function RequestRow({ r }: { r: RequestSummary }) {
   return (
     <li>
-      <Link to={`/app/r/${r.id}`} className="flex items-start gap-3 border-b border-line py-3 hover:bg-paper/70">
+      <Link to={`/app/r/${r.id}`} className="-mx-2 flex items-start gap-3 rounded-lg border-b border-line px-2 py-3 transition-colors duration-150 hover:bg-paper">
         {r.status === "failed" || r.status === "rejected" ? (
           <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-no text-xs font-bold text-no">
             ✕
@@ -62,7 +62,7 @@ export function RecentDisputes() {
         </h2>
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Show</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value as RequestStatus | "")} className="min-h-11 rounded border border-line bg-paper px-2">
+          <select value={status} onChange={(e) => setStatus(e.target.value as RequestStatus | "")} className="min-h-11 rounded-lg border border-line bg-paper px-2 text-ink">
             {FILTERS.map((f) => (
               <option key={f.label} value={f.value}>
                 {f.label}
@@ -79,7 +79,7 @@ export function RecentDisputes() {
         ))}
       </ul>
       {pages.hasNextPage && (
-        <button type="button" onClick={() => void pages.fetchNextPage()} disabled={pages.isFetchingNextPage} className="mt-3 text-sm underline">
+        <button type="button" onClick={() => void pages.fetchNextPage()} disabled={pages.isFetchingNextPage} className="mt-3 min-h-11 text-sm underline underline-offset-2 hover:text-bronze-text">
           {pages.isFetchingNextPage ? "Loading…" : "Show older disputes"}
         </button>
       )}

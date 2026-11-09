@@ -17,6 +17,7 @@ import { ApiProvider } from "../src/hooks.js";
 import { DisputeForm } from "../src/pages/DisputeForm.js";
 import { RequestPage } from "../src/pages/RequestPage.js";
 import { App } from "../src/App.js";
+import { ThemeProvider } from "../src/components/theme-provider.js";
 import { CLAIMANT, COUNTERPARTY, evidence } from "./fixtures.js";
 
 interface ChainCase {
@@ -140,6 +141,7 @@ function setup(node: ReactNode, path: string, cases: Readonly<Record<number, Cha
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
+    <ThemeProvider>
     <WagmiProvider config={config as unknown as typeof wagmiConfig}>
       <QueryClientProvider client={client}>
         <ApiProvider value={api()}>
@@ -155,7 +157,8 @@ function setup(node: ReactNode, path: string, cases: Readonly<Record<number, Cha
           </MemoryRouter>
         </ApiProvider>
       </QueryClientProvider>
-    </WagmiProvider>,
+    </WagmiProvider>
+    </ThemeProvider>,
   );
 }
 

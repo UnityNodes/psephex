@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { Answer } from "../api.js";
 import type { Ballot } from "../lib/steps.js";
 
@@ -10,14 +11,29 @@ function shortName(model: string): string {
 }
 
 export function BallotDisc({ vote, size = 64 }: { vote: Answer | null; size?: number }) {
-  const color = vote ? COLOR[vote] : "transparent";
+  const metal = `psephos-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  if (!vote) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="25" fill="none" stroke="var(--color-muted)" strokeWidth="2" strokeDasharray="4 4" />
+      </svg>
+    );
+  }
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" className={vote ? "ballot-drop" : undefined}>
-      <circle cx="32" cy="32" r="26" fill={color} stroke={vote ? color : "var(--color-muted)"} strokeWidth="2" strokeDasharray={vote ? undefined : "4 4"} />
-      {vote && vote !== "UNKNOWN" && <rect x="30" y="3" width="4" height="58" rx="2" fill="var(--color-ink)" />}
-      {vote === "YES" && <circle cx="32" cy="32" r="8" fill="var(--color-ink)" />}
-      {vote === "NO" && <circle cx="32" cy="32" r="7" fill={color} stroke="var(--color-ink)" strokeWidth="4" />}
-      {vote === "UNKNOWN" && <circle cx="32" cy="32" r="7" fill="none" stroke="var(--color-paper)" strokeWidth="3" strokeDasharray="3 3" />}
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" className="ballot-drop">
+      <defs>
+        <radialGradient id={metal} cx="34%" cy="28%" r="78%">
+          <stop offset="0" stopColor="var(--bronze-hi)" />
+          <stop offset="0.55" stopColor="var(--bronze)" />
+          <stop offset="1" stopColor="var(--bronze-lo)" />
+        </radialGradient>
+      </defs>
+      <circle cx="32" cy="32" r="28" fill="none" stroke={COLOR[vote]} strokeWidth="3" />
+      <circle cx="32" cy="32" r="23.5" fill={`url(#${metal})`} />
+      {vote !== "UNKNOWN" && <rect x="30" y="1" width="4" height="62" rx="2" fill="var(--axle)" />}
+      {vote === "YES" && <circle cx="32" cy="32" r="7.5" fill="var(--axle)" />}
+      {vote === "NO" && <circle cx="32" cy="32" r="6.5" fill={`url(#${metal})`} stroke="var(--axle)" strokeWidth="4" />}
+      {vote === "UNKNOWN" && <circle cx="32" cy="32" r="7" fill="none" stroke="var(--axle)" strokeWidth="3" strokeDasharray="3 3" />}
     </svg>
   );
 }

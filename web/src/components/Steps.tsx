@@ -1,11 +1,12 @@
+import { Check, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Step, StepState } from "../lib/steps.js";
 
-const MARK: Readonly<Record<StepState, { symbol: string; label: string; className: string }>> = {
-  done: { symbol: "✓", label: "done", className: "bg-yes text-paper border-yes" },
-  active: { symbol: "…", label: "in progress", className: "bg-paper text-ink border-bronze animate-pulse motion-reduce:animate-none" },
-  waiting: { symbol: "", label: "not started", className: "bg-transparent text-muted border-line" },
-  failed: { symbol: "✕", label: "stopped", className: "bg-no text-paper border-no" },
+const MARK: Readonly<Record<StepState, { symbol: ReactNode; label: string; className: string }>> = {
+  done: { symbol: <Check className="size-4" strokeWidth={2.5} />, label: "done", className: "bg-yes text-paper border-yes" },
+  active: { symbol: <span className="size-2 rounded-full bg-bronze" />, label: "in progress", className: "bg-paper text-ink border-bronze animate-pulse motion-reduce:animate-none" },
+  waiting: { symbol: null, label: "not started", className: "bg-transparent text-muted border-line" },
+  failed: { symbol: <X className="size-4" strokeWidth={2.5} />, label: "stopped", className: "bg-no text-paper border-no" },
 };
 
 export function Steps({ steps, links }: { steps: readonly Step[]; links?: Partial<Record<Step["key"], ReactNode>> }) {

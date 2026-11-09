@@ -1,29 +1,118 @@
 @import "tailwindcss";
-@import "@fontsource-variable/bricolage-grotesque";
-@import "@fontsource/ibm-plex-sans/400.css";
-@import "@fontsource/ibm-plex-sans/500.css";
-@import "@fontsource/ibm-plex-sans/600.css";
 @import "@fontsource/ibm-plex-mono/400.css";
 
-@theme {
-  --color-stone: #e6e9ee;
-  --color-paper: #f6f7f9;
-  --color-ink: #1b2430;
-  --color-muted: #545e6c;
-  --color-line: #c3cad4;
-  --color-yes: #276a5c;
-  --color-no: #8e2f2f;
-  --color-unknown: #5b6370;
-  --color-bronze: #a0712c;
-  --color-bronze-text: #8a5f22;
-  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+@custom-variant dark (&:where(.dark, .dark *));
+
+@font-face {
+  font-family: "Clash Display";
+  src: url("/fonts/ClashDisplay-Variable.woff2") format("woff2");
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --stone: #e6e9ee;
+  --paper: #f6f7f9;
+  --raised: #ffffff;
+  --ink: #1b2430;
+  --muted: #545e6c;
+  --line: #c3cad4;
+  --yes: #276a5c;
+  --no: #8e2f2f;
+  --unknown: #5b6370;
+  --bronze: #a0712c;
+  --bronze-text: #7f5720;
+  --bronze-fill: #7f5720;
+  --bronze-fill-hover: #6a4819;
+  --on-bronze: #ffffff;
+  --bronze-hi: #d7a862;
+  --bronze-lo: #7a5420;
+  --axle: #1b2430;
+  --vault: #1b2430;
+  --vault-ink: #eef0f3;
+  --vault-line: #3a4656;
+  --glow: rgb(160 113 44 / 0.1);
+}
+
+.dark {
+  --stone: #141618;
+  --paper: #1c1f22;
+  --raised: #23272b;
+  --ink: #ebe7df;
+  --muted: #a3a8ae;
+  --line: #33383e;
+  --yes: #5fb39b;
+  --no: #e07d70;
+  --unknown: #a2abb5;
+  --bronze: #c8924a;
+  --bronze-text: #dcaa68;
+  --bronze-fill: #c8924a;
+  --bronze-fill-hover: #dcaa68;
+  --on-bronze: #141618;
+  --bronze-hi: #e7bd7c;
+  --bronze-lo: #8c5f26;
+  --axle: #141618;
+  --vault: #0e1011;
+  --vault-ink: #e2ded6;
+  --vault-line: #2b3035;
+  --glow: rgb(200 146 74 / 0.14);
+}
+
+@theme inline {
+  --color-stone: var(--stone);
+  --color-paper: var(--paper);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-yes: var(--yes);
+  --color-no: var(--no);
+  --color-unknown: var(--unknown);
+  --color-bronze: var(--bronze);
+  --color-bronze-text: var(--bronze-text);
+  --color-bronze-hi: var(--bronze-hi);
+  --color-bronze-fill: var(--bronze-fill);
+  --color-bronze-fill-hover: var(--bronze-fill-hover);
+  --color-on-bronze: var(--on-bronze);
+  --color-vault: var(--vault);
+  --color-vault-ink: var(--vault-ink);
+  --color-vault-line: var(--vault-line);
+
+  --color-background: var(--stone);
+  --color-foreground: var(--ink);
+  --color-card: var(--paper);
+  --color-card-foreground: var(--ink);
+  --color-primary: var(--bronze-fill);
+  --color-primary-foreground: var(--on-bronze);
+  --color-secondary: var(--raised);
+  --color-secondary-foreground: var(--ink);
+  --color-accent: var(--raised);
+  --color-accent-foreground: var(--ink);
+  --color-muted-foreground: var(--muted);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--bronze);
+  --color-destructive: var(--no);
+
+  --font-display: "Clash Display", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Switzer", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
-  background: var(--color-stone);
-  color: var(--color-ink);
+  background: var(--stone);
+  color: var(--ink);
   font-family: var(--font-sans);
   -webkit-text-size-adjust: 100%;
 }
@@ -31,13 +120,23 @@ html {
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--color-stone);
-  line-height: 1.5;
+  background: var(--stone);
+  line-height: 1.55;
+  font-feature-settings: "ss01";
+}
+
+::selection {
+  background: var(--bronze);
+  color: var(--on-bronze);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-bronze);
+  outline: 2px solid var(--bronze);
   outline-offset: 2px;
+}
+
+.basalt-glow {
+  background-image: radial-gradient(60rem 30rem at 85% -10%, var(--glow), transparent 70%);
 }
 
 @keyframes ballot-drop {
@@ -52,11 +151,15 @@ body {
 }
 
 .ballot-drop {
-  animation: ballot-drop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  animation: ballot-drop 360ms var(--ease-out-quint) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ballot-drop {
     animation: none;
   }
+}
+
+.font-display {
+  word-spacing: 0.08em;
 }

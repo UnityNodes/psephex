@@ -1,5 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { loadEnv, type Plugin, type PluginOption } from "vite";
 import { defineConfig } from "vitest/config";
 
@@ -15,6 +17,18 @@ function requireApiUrl(raw: string | undefined): string {
   const url = new URL(raw);
   if (url.protocol !== "https:" && !LOCAL_HOSTS.has(url.hostname)) throw new Error("VITE_API_URL must use https outside localhost");
   return url.origin;
+}
+
+const FONTS = ["ClashDisplay-Variable.woff2", "Switzer-Variable.woff2"];
+
+/**
+ * The Fontshare license forbids putting the font files in a public repository, so they are
+ * fetched by scripts/fetch-fonts.sh and ignored by git. A build without them would ship a page
+ * that silently falls back to system fonts, so it stops instead.
+ */
+function requireFonts(): void {
+  const missing = FONTS.filter((f) => !existsSync(fileURLToPath(new URL(`./public/fonts/${f}`, import.meta.url))));
+  if (missing.length > 0) throw new Error(`missing fonts ${missing.join(", ")}: run scripts/fetch-fonts.sh first`);
 }
 
 function contentSecurityPolicy(apiOrigin: string, rpcOrigin: string): Plugin {
@@ -39,9 +53,11 @@ function contentSecurityPolicy(apiOrigin: string, rpcOrigin: string): Plugin {
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const plugins: PluginOption[] = [react(), tailwindcss()];
+  if (command === "build") requireFonts();
   if (command === "build") plugins.push(contentSecurityPolicy(requireApiUrl(env.VITE_API_URL), new URL(env.VITE_BASE_RPC_URL || DEFAULT_RPC).origin));
   return {
     plugins,
+    resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
     build: { target: "es2022", sourcemap: false },
     server: { fs: { allow: [".", "../contracts/base/src/examples"] } },
     test: {

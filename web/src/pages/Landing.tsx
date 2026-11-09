@@ -1,9 +1,15 @@
+import { useReducedMotion } from "motion/react";
 import { Link } from "react-router";
 import clientSource from "../../../contracts/base/src/examples/YesNoClient.sol?raw";
 import type { Stats } from "../api.js";
 import { Ballots } from "../components/Ballots.js";
 import { CopyButton } from "../components/Commands.js";
 import { SiteFooter } from "../components/SiteFooter.js";
+import { SiteHeader } from "../components/SiteHeader.js";
+import { Button } from "../components/ui/button.js";
+import { BorderBeam } from "../components/ui/border-beam.js";
+import { Card } from "../components/ui/card.js";
+import { NumberTicker } from "../components/ui/number-ticker.js";
 import { AIORACLE_ADDRESS } from "../deployment.js";
 import { useLatestVerdict, usePageTitle, useStats } from "../hooks.js";
 import { displayText } from "../lib/dispute.js";
@@ -29,29 +35,53 @@ const PROVES: readonly string[] = [
   "Answers repeat in practice: 80 of 80 repeats matched in our first check, and 90 of 90 for the dashboard examples.",
 ];
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
+function Count({ n, word }: { n: number; word?: string }) {
+  return (
+    <>
+      <NumberTicker value={n} className="text-ink" />
+      {word && ` ${word}${n === 1 ? "" : "s"}`}
+    </>
+  );
 }
 
 function NumbersLine({ stats }: { stats: Stats }) {
   const answered = stats.byStatus.confirmed ?? 0;
   const avg = stats.avgSecondsSeenToConfirmed;
   return (
-    <p className="m-0 max-w-[70ch] text-lg">
-      <span>{plural(stats.total, "dispute")}</span> so far, <span>{answered} answered on Base</span>:{" "}
-      <span>
-        {stats.answers.YES} YES, {stats.answers.NO} NO and {stats.answers.UNKNOWN} UNKNOWN
-      </span>
-      .{avg !== null && ` On average ${avg} s from the relayer seeing a question to its answer on Base, counting the test runs where we killed the relayer on purpose.`}
-    </p>
+    <div className="flex flex-col gap-3">
+      <p className="m-0 max-w-[30ch] font-display text-3xl leading-tight font-medium text-muted sm:text-4xl">
+        <span className="text-ink">
+          <Count n={stats.total} word="dispute" />
+        </span>{" "}
+        so far,{" "}
+        <span className="text-ink">
+          <Count n={answered} /> answered on Base
+        </span>
+        :{" "}
+        <span className="text-yes">
+          <Count n={stats.answers.YES} /> YES
+        </span>
+        ,{" "}
+        <span className="text-no">
+          <Count n={stats.answers.NO} /> NO
+        </span>{" "}
+        and{" "}
+        <span className="text-unknown">
+          <Count n={stats.answers.UNKNOWN} /> UNKNOWN
+        </span>
+        .
+      </p>
+      {avg !== null && <p className="m-0 max-w-[62ch] text-sm text-muted">On average {avg} s from the relayer seeing a question to its answer on Base, counting the test runs where we killed the relayer on purpose.</p>}
+    </div>
   );
 }
 
 function LiveNumbers() {
   const stats = useStats();
   return (
-    <section aria-labelledby="live-heading" className="flex flex-col gap-3 border-y border-line py-8">
-      <h2 id="live-heading" className="m-0 font-display text-xl font-semibold">
+    <section aria-labelledby="live-heading" className="flex flex-col gap-4 border-y border-line py-10">
+      <h2 id="live-heading" className="m-0 flex items-center gap-2 text-sm font-medium text-bronze-text">
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-yes" />
         Live on Base Sepolia
       </h2>
       {stats.data && <NumbersLine stats={stats.data} />}
@@ -63,41 +93,43 @@ function LiveNumbers() {
 
 function LatestVerdict() {
   const { detail } = useLatestVerdict();
+  const still = useReducedMotion() === true;
   const seconds = detail?.timeToConfirmMs != null ? (detail.timeToConfirmMs / 1000).toFixed(1) : null;
   return (
-    <section aria-labelledby="latest-heading" className="flex flex-col gap-4 rounded-lg border border-line bg-paper p-6 shadow-[0_1px_0_var(--color-line),0_18px_40px_-28px_rgb(27_36_48/0.45)]">
+    <Card role="region" aria-labelledby="latest-heading" className="relative gap-5 overflow-hidden rounded-2xl border-line bg-paper p-6 shadow-[0_24px_60px_-36px_rgb(0_0_0/0.55)]">
       <h2 id="latest-heading" className="m-0 text-sm font-medium text-muted">
         Latest verdict
       </h2>
       {detail ? (
         <>
-          <p className="m-0 line-clamp-3 font-display text-xl leading-snug font-semibold break-words">{displayText(detail.question)}</p>
+          <p className="m-0 line-clamp-3 font-display text-xl leading-snug font-medium break-words">{displayText(detail.question)}</p>
           <Ballots ballots={ballots(detail)} verdict={detail.answer} compact />
           {seconds && <p className="m-0 text-sm text-muted">Answered on Base {seconds} s after the relayer saw it.</p>}
-          <Link to={`/app/r/${detail.id}`} className="text-sm underline underline-offset-2 hover:text-bronze">
+          <Link to={`/app/r/${detail.id}`} className="self-start text-sm font-medium text-bronze-text underline underline-offset-4 hover:text-ink">
             See how dispute #{detail.id} was decided
           </Link>
         </>
       ) : (
         <Ballots ballots={[]} verdict={null} compact />
       )}
-    </section>
+      {!still && <BorderBeam size={90} duration={9} borderWidth={1.5} colorFrom="var(--bronze-hi)" colorTo="var(--bronze-lo)" />}
+    </Card>
   );
 }
 
 function HowItWorks() {
   return (
-    <section id="how" aria-labelledby="how-heading" className="flex flex-col gap-8">
-      <h2 id="how-heading" className="m-0 font-display text-3xl font-semibold">
+    <section id="how" aria-labelledby="how-heading" className="flex scroll-mt-6 flex-col gap-10">
+      <h2 id="how-heading" className="m-0 font-display text-3xl font-semibold sm:text-4xl">
         How it works
       </h2>
-      <ol aria-label="How a question is answered" className="m-0 grid list-none gap-8 p-0 md:grid-cols-5 md:gap-5">
+      <ol aria-label="How a question is answered" className="m-0 grid list-none gap-0 p-0 md:grid-cols-5 md:gap-6">
         {STEPS.map((s, i) => (
-          <li key={s.title} className="relative flex flex-col gap-2 md:border-t-2 md:border-ink md:pt-4">
-            <span className="font-display text-sm font-semibold text-bronze-text">
+          <li key={s.title} className="relative flex flex-col gap-2 border-l border-line py-4 pl-5 md:border-t-2 md:border-l-0 md:border-bronze md:py-0 md:pt-5 md:pl-0">
+            <span className="font-display text-sm font-medium text-bronze-text">
               {i + 1}. {s.where}
             </span>
-            <h3 className="m-0 text-base font-semibold">{s.title}</h3>
+            <h3 className="m-0 text-base font-semibold text-ink">{s.title}</h3>
             <p className="m-0 text-sm text-muted">{s.body}</p>
           </li>
         ))}
@@ -108,12 +140,12 @@ function HowItWorks() {
 
 function Limits() {
   return (
-    <div className="grid gap-10 md:grid-cols-2">
+    <div className="grid gap-12 md:grid-cols-2 md:gap-16">
       <section aria-labelledby="proves-heading" className="flex flex-col gap-4">
         <h2 id="proves-heading" className="m-0 font-display text-2xl font-semibold">
           What a verdict proves
         </h2>
-        <ul className="m-0 flex list-disc flex-col gap-3 pl-5 marker:text-bronze">
+        <ul className="m-0 flex list-disc flex-col gap-3 pl-5 text-[15px] marker:text-yes">
           {PROVES.map((p) => (
             <li key={p}>{p}</li>
           ))}
@@ -123,10 +155,10 @@ function Limits() {
         <h2 id="limits-heading" className="m-0 font-display text-2xl font-semibold">
           What a verdict does not prove
         </h2>
-        <ul className="m-0 flex list-disc flex-col gap-3 pl-5 marker:text-bronze">
+        <ul className="m-0 flex list-disc flex-col gap-3 pl-5 text-[15px] marker:text-no">
           <li>
             That the answer is right. In{" "}
-            <Link to="/app/r/2" className="underline underline-offset-2 hover:text-bronze">
+            <Link to="/app/r/2" className="underline underline-offset-2 hover:text-bronze-text">
               dispute #2
             </Link>{" "}
             all three models said 9 is a prime number, and the oracle delivered that.
@@ -143,9 +175,9 @@ function Limits() {
 
 function ForDevelopers() {
   return (
-    <section id="developers" aria-labelledby="dev-heading" className="grid gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+    <section id="developers" aria-labelledby="dev-heading" className="grid scroll-mt-6 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
       <div className="flex flex-col gap-4">
-        <h2 id="dev-heading" className="m-0 font-display text-3xl font-semibold">
+        <h2 id="dev-heading" className="m-0 font-display text-3xl font-semibold sm:text-4xl">
           Use it from your contract
         </h2>
         <p className="m-0 text-muted">
@@ -161,9 +193,9 @@ function ForDevelopers() {
         </dl>
         <p className="m-0 text-sm text-muted">This is the contract the test suite runs against AiOracle, not a sketch.</p>
       </div>
-      <div className="min-w-0 rounded-lg bg-ink p-4 text-paper">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="font-mono text-xs text-line">YesNoClient.sol</span>
+      <div className="min-w-0 rounded-2xl border border-vault-line bg-vault p-4 text-vault-ink">
+        <div className="mb-3 flex items-center justify-between gap-2 border-b border-vault-line pb-3">
+          <span className="font-mono text-xs text-bronze-hi">YesNoClient.sol</span>
           <CopyButton text={clientSource} />
         </div>
         <pre className="m-0 overflow-x-auto font-mono text-xs leading-relaxed">
@@ -177,52 +209,57 @@ function ForDevelopers() {
 export function Landing() {
   usePageTitle("Psephex: an AI oracle for Base checked on NEAR");
   return (
-    <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
-      <header className="flex flex-wrap items-center justify-between gap-4 py-6">
-        <Link to="/" className="font-display text-2xl font-bold tracking-tight">
-          Psephex
-        </Link>
-        <nav aria-label="Main" className="flex flex-wrap items-center gap-x-4 text-sm">
-          <a href="#how" className="py-3 text-muted hover:text-ink">
-            How it works
-          </a>
-          <a href="#developers" className="py-3 text-muted hover:text-ink">
-            For developers
-          </a>
-          <Link to="/app" className="rounded-full border-2 border-ink px-4 py-1.5 font-medium hover:bg-ink hover:text-paper">
-            Open the dashboard
-          </Link>
-        </nav>
-      </header>
+    <div className="basalt-glow min-h-dvh">
+      <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
+        <SiteHeader
+          end={
+            <Button asChild variant="outline" className="hidden sm:inline-flex">
+              <Link to="/app">Open the dashboard</Link>
+            </Button>
+          }
+        >
+          <nav aria-label="Main" className="flex flex-wrap items-center gap-x-5 text-sm">
+            <a href="#how" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink">
+              How it works
+            </a>
+            <a href="#developers" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink">
+              For developers
+            </a>
+            <Link to="/app" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink sm:hidden">
+              Dashboard
+            </Link>
+          </nav>
+        </SiteHeader>
 
-      <main className="flex flex-col gap-20 pt-8 pb-20">
-        <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
-          <div className="flex flex-col gap-6">
-            <h1 className="m-0 font-display text-4xl leading-[1.04] font-semibold sm:text-6xl">Three AI models answer, NEAR checks that two agree, Base gets the verdict.</h1>
-            <p className="m-0 max-w-[58ch] text-lg text-muted">
-              Psephex is a yes-or-no oracle for Base. Every answer is signed inside a TEE, a NEAR contract enforces two of three, and NEAR Chain Signatures write the result back to Base. No bridge, no oracle key on a server.
-            </p>
-            <div className="flex flex-wrap items-center gap-5">
-              <Link to="/app" className="rounded-full bg-ink px-6 py-3 text-base font-medium text-paper hover:bg-bronze">
-                Try it on Base Sepolia
-              </Link>
-              <a href="#proof" className="underline underline-offset-4 hover:text-bronze">
-                What it proves
-              </a>
+        <main className="flex flex-col gap-24 pt-10 pb-24 sm:pt-16">
+          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)] lg:gap-16">
+            <div className="flex flex-col gap-7">
+              <h1 className="m-0 max-w-[16ch] font-display text-[2.6rem] leading-[0.98] font-semibold tracking-[-0.015em] sm:text-6xl lg:text-7xl">Three AI models answer, NEAR checks that two agree, Base gets the verdict.</h1>
+              <p className="m-0 max-w-[56ch] text-base text-muted sm:text-lg">
+                Psephex is a yes-or-no oracle for Base. Every answer is signed inside a TEE, a NEAR contract enforces two of three, and NEAR Chain Signatures write the result back to Base. No bridge, no oracle key on a server.
+              </p>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                <Button asChild size="lg">
+                  <Link to="/app">Try it on Base Sepolia</Link>
+                </Button>
+                <a href="#proof" className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-bronze-text">
+                  What it proves
+                </a>
+              </div>
             </div>
+            <LatestVerdict />
           </div>
-          <LatestVerdict />
-        </div>
 
-        <LiveNumbers />
-        <HowItWorks />
-        <div id="proof">
-          <Limits />
-        </div>
-        <ForDevelopers />
-      </main>
+          <LiveNumbers />
+          <HowItWorks />
+          <div id="proof" className="scroll-mt-6">
+            <Limits />
+          </div>
+          <ForDevelopers />
+        </main>
 
-      <SiteFooter />
+        <SiteFooter />
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { ArrowUpRight } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { formatEther } from "viem";
@@ -8,7 +9,10 @@ import type { RequestDetail } from "../api.js";
 import { Ballots } from "../components/Ballots.js";
 import { Commands } from "../components/Commands.js";
 import { Steps } from "../components/Steps.js";
+import { Badge } from "../components/ui/badge.js";
+import { Button } from "../components/ui/button.js";
 import { shortAddress } from "../components/Wallet.js";
+import { STATUS_LABEL } from "./RecentDisputes.js";
 import { CHAIN, DISPUTE_ADDRESS, explorer } from "../deployment.js";
 import { useCase, useChainQuestionHash, usePageTitle, useRequestDetail, useSettlementWinner, useVerifyPlan } from "../hooks.js";
 import { describeTxError, displayText } from "../lib/dispute.js";
@@ -20,8 +24,9 @@ const CLOCK_MS = 5_000;
 function ExternalLink({ href, children }: { href: string | null; children: ReactNode }) {
   if (!href) return null;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-bronze">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-bronze-text">
       {children}
+      <ArrowUpRight className="size-3.5" aria-hidden="true" />
     </a>
   );
 }
@@ -95,9 +100,9 @@ function RefundButton({ id, onDone }: { id: number; onDone: () => void }) {
 
   return (
     <div className="mt-3 flex flex-col gap-2">
-      <button type="button" disabled={!ready || busy} onClick={() => void handleRefund()} className="self-start rounded-full bg-ink px-5 py-2 text-sm font-medium text-paper hover:bg-bronze disabled:opacity-50">
+      <Button type="button" disabled={!ready || busy} onClick={() => void handleRefund()} className="self-start">
         {busy ? "Refunding…" : "Refund the stake to the claimant"}
-      </button>
+      </Button>
       {!ready && <p className="m-0 text-xs text-muted">Connect a wallet on {CHAIN.name}. Anyone can send the refund; the stake always goes to the claimant.</p>}
       {message && (
         <p role="alert" className="m-0 text-sm text-no">
@@ -147,13 +152,16 @@ export function RequestPage() {
   return (
     <article className="flex min-w-0 flex-col gap-10">
       <header className="flex flex-col gap-3">
-        <p className="m-0 text-sm text-muted">
-          <Link to="/app" className="underline underline-offset-2">
-            Disputes
-          </Link>{" "}
-          / #{id}
-        </p>
-        <h1 className="m-0 max-w-[38ch] font-display text-3xl leading-tight font-semibold break-words sm:text-4xl">{title}</h1>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+          <span>
+            <Link to="/app" className="underline underline-offset-2 hover:text-bronze-text">
+              Disputes
+            </Link>{" "}
+            / #{id}
+          </span>
+          {d && <Badge variant="outline">{STATUS_LABEL[d.status]}</Badge>}
+        </div>
+        <h1 className="m-0 max-w-[34ch] font-display text-3xl leading-tight font-semibold break-words sm:text-4xl">{title}</h1>
         {notFound && <p className="m-0 text-muted">If you just opened it, wait a few seconds for Base to include the transaction.</p>}
         {matches === true && <p className="m-0 text-sm text-muted">This text matches the question hash stored on Base.</p>}
         {matches === false && (
@@ -169,12 +177,12 @@ export function RequestPage() {
             The vote
           </h2>
           <Ballots ballots={d ? ballots(d) : []} verdict={d?.answer ?? null} stopped={d !== null && (d.status === "failed" || d.status === "rejected")} />
-          <div role="status" className="rounded-md border-l-4 border-bronze bg-paper p-4">
+          <div role="status" className="rounded-xl border border-line border-l-4 border-l-bronze bg-paper p-5">
             {detail.isError && <p className="m-0 text-no">The Psephex API did not answer. This page retries on its own; the chain data below is still live.</p>}
             {!detail.isError && (d !== null || notFound) && <p className="m-0 [overflow-wrap:anywhere]">{outcomeText(progress.outcome, caseInfo.data, d, now)}</p>}
             {!detail.isError && d === null && !notFound && <p className="m-0 text-muted">Loading the dispute…</p>}
             {progress.outcome === "settled" && (
-              <a href={explorer.baseAddress(DISPUTE_ADDRESS) ?? undefined} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm underline underline-offset-2 hover:text-bronze">
+              <a href={explorer.baseAddress(DISPUTE_ADDRESS) ?? undefined} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm underline underline-offset-2 hover:text-bronze-text">
                 Dispute contract on Basescan
               </a>
             )}

@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
@@ -14,7 +18,23 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "node", "@testing-library/jest-dom/vitest"]
+    "types": [
+      "vite/client",
+      "node",
+      "@testing-library/jest-dom/vitest"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
   },
-  "include": ["src", "test", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "e2e",
+    "vite.config.ts",
+    "playwright.config.ts"
+  ]
 }
