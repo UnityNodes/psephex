@@ -1,0 +1,61 @@
+@import "tailwindcss";
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+
+@theme {
+  --color-stone: #e6e9ee;
+  --color-paper: #f6f7f9;
+  --color-ink: #1b2430;
+  --color-muted: #545e6c;
+  --color-line: #c3cad4;
+  --color-yes: #2f7d6d;
+  --color-no: #8e2f2f;
+  --color-unknown: #6b7480;
+  --color-bronze: #a0712c;
+  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html {
+  background: var(--color-stone);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--color-stone);
+  line-height: 1.5;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-bronze);
+  outline-offset: 2px;
+}
+
+@keyframes ballot-drop {
+  from {
+    transform: translateY(-14px) rotate(-8deg);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.ballot-drop {
+  animation: ballot-drop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ballot-drop {
+    animation: none;
+  }
+}
