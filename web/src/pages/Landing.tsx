@@ -1,5 +1,5 @@
 import { m, useReducedMotion } from "motion/react";
-import { Box, Check, Coins, Cpu, ShieldCheck, Signature, X } from "lucide-react";
+import { Box, Check, Cpu, Database, ShieldCheck, Signature, X } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router";
 import clientSource from "../../../contracts/base/src/examples/YesNoClient.sol?raw";
@@ -10,10 +10,12 @@ import { SiteFooter } from "../components/SiteFooter.js";
 import { SiteHeader } from "../components/SiteHeader.js";
 import { Button } from "../components/ui/button.js";
 import { NumberTicker } from "../components/ui/number-ticker.js";
-import { AIORACLE_ADDRESS } from "../deployment.js";
+import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, NEAR_ORACLE_CONTRACT } from "../deployment.js";
+import { NEAR_CLI_SNIPPET, NEAR_CLIENT_SNIPPET } from "../lib/snippets.js";
+import { SOURCES, SOURCE_SHORT } from "../sources.js";
 import { useLatestVerdict, usePageTitle, useStats } from "../hooks.js";
 
-const STEP_ICONS: readonly ReactNode[] = [Box, Cpu, ShieldCheck, Signature, Coins].map((Icon, i) => <Icon key={i} className="size-4" aria-hidden="true" />);
+const STEP_ICONS: readonly ReactNode[] = [Box, Cpu, ShieldCheck, Database, Signature].map((Icon, i) => <Icon key={i} className="size-4" aria-hidden="true" />);
 
 function Reveal({ children, className, delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
   const still = useReducedMotion() === true || typeof IntersectionObserver === "undefined";
@@ -32,22 +34,34 @@ function Reveal({ children, className, delay = 0 }: { children: ReactNode; class
 }
 
 const STEPS: readonly { title: string; body: string; where: string }[] = [
-  { where: "Base", title: "Base records the question", body: "A contract calls AiOracle.ask with a yes-or-no question and the 0.0001 ETH fee. Base stores the hash of the question." },
+  {
+    where: "NEAR",
+    title: "You ask on NEAR and pay in NEAR",
+    body: "Call ask on oracle.psephex.testnet with a yes-or-no question and the deposit that ask_deposit(question) returns: the fee plus the storage for the record. Any extra deposit comes back.",
+  },
   {
     where: "NEAR AI and Phala",
     title: "Three models answer in TEEs",
     body: "The relayer sends the exact request the NEAR contract built to DeepSeek V4.1 and Qwen3.6 on NEAR AI and to Gemma 4 on Phala. Every answer is signed inside a TEE.",
   },
-  { where: "NEAR", title: "NEAR checks two of three", body: "oracle.psephex.testnet rebuilds the request, checks every signature against the registered keys and needs two matching answers." },
-  { where: "NEAR MPC", title: "NEAR MPC signs for Base", body: "The contract asks NEAR Chain Signatures to sign the Base transaction. Nobody holds the oracle's EVM key." },
-  { where: "Base", title: "Base pays out", body: "AiOracle accepts the answer only from that MPC address and only for the matching request and question, then calls your contract." },
+  { where: "NEAR", title: "NEAR checks two of three", body: "oracle.psephex.testnet rebuilds the request from the question in its own state, checks every signature against the registered keys and needs two matching answers." },
+  {
+    where: "NEAR",
+    title: "The verdict lands in NEAR state",
+    body: "The contract stores the answer and the votes. If you asked with callback set, it calls on_answer(request_id, answer) on your contract.",
+  },
+  {
+    where: "NEAR Chain Signatures",
+    title: "Base and Arbitrum get the same verdict",
+    body: "For a question asked on Base or Arbitrum, the NEAR contract asks NEAR MPC to sign the answer transaction. AiOracle accepts it only from that MPC address. There is no bridge and no oracle key on a server.",
+  },
 ];
 
 const PROVES: readonly string[] = [
   "Each answer was signed inside a TEE by a key registered on NEAR and attested with a fresh nonce: the model's own key on NEAR AI, the gateway's key on Phala.",
   "At least two of the three signed answers agree. The NEAR contract checks this, not our server.",
-  "The models saw the request the NEAR contract built from the question on Base, with temperature 0 and a fixed seed inside the signed request.",
-  "Only the MPC-derived address can deliver the answer, and only for the matching id and question. There is no bridge and no oracle key on a server.",
+  "The models saw the request the NEAR contract built from the stored question, with temperature 0 and a fixed seed inside the signed request.",
+  "On Base and Arbitrum, only the MPC-derived address can deliver the answer, and only for the matching id and question. There is no bridge and no oracle key on a server.",
   "Answers repeat in practice: 80 of 80 repeats matched in our first check, and 90 of 90 for the dashboard examples.",
 ];
 
@@ -71,7 +85,7 @@ function NumbersLine({ stats }: { stats: Stats }) {
         </span>{" "}
         so far,{" "}
         <span className="text-ink">
-          <Count n={answered} /> answered on Base
+          <Count n={answered} /> answered
         </span>
         :{" "}
         <span className="text-yes">
@@ -87,7 +101,8 @@ function NumbersLine({ stats }: { stats: Stats }) {
         </span>
         .
       </p>
-      {avg !== null && <p className="m-0 max-w-[62ch] text-sm text-muted">On average {avg} s from the relayer seeing a question to its answer on Base, counting the test runs where we killed the relayer on purpose.</p>}
+      {stats.bySource && <p className="m-0 text-sm text-muted">{SOURCES.map((src) => `${stats.bySource?.[src]?.total ?? 0} on ${SOURCE_SHORT[src]}`).join(", ")}.</p>}
+      {avg !== null && <p className="m-0 max-w-[62ch] text-sm text-muted">On average {avg} s from the relayer seeing a question to its answer on chain, counting the test runs where we killed the relayer on purpose.</p>}
     </div>
   );
 }
@@ -98,10 +113,10 @@ function LiveNumbers() {
     <section aria-labelledby="live-heading" className="flex flex-col gap-4 border-y border-line py-10">
       <h2 id="live-heading" className="m-0 flex items-center gap-2 text-sm font-medium text-bronze-text">
         <span aria-hidden="true" className="size-1.5 rounded-full bg-yes" />
-        Live on Base Sepolia
+        Live on testnet
       </h2>
       {stats.data && <NumbersLine stats={stats.data} />}
-      {stats.isError && <p className="m-0 text-muted">Live numbers are unavailable right now. The contracts below are still on Basescan.</p>}
+      {stats.isError && <p className="m-0 text-muted">Live numbers are unavailable right now. The contracts below are still on Nearblocks and Basescan.</p>}
       {stats.isPending && <p className="m-0 text-muted">Reading the numbers…</p>}
     </section>
   );
@@ -114,7 +129,7 @@ function HowItWorks() {
         <h2 id="how-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
           How it works
         </h2>
-        <p className="m-0 max-w-[44ch] text-muted">One question crosses two chains and three enclaves. No step trusts our server: NEAR checks the signatures, and Base only accepts an answer signed by NEAR MPC.</p>
+        <p className="m-0 max-w-[44ch] text-muted">Every question passes through one NEAR contract and three enclaves. No step trusts our server: NEAR checks the signatures and keeps the verdict, and Base and Arbitrum only accept an answer signed by NEAR MPC.</p>
       </div>
       <ol aria-label="How a question is answered" className="m-0 flex list-none flex-col p-0">
         {STEPS.map((s, i) => (
@@ -161,7 +176,7 @@ function Limits() {
             <X className="mt-1 size-4 text-no" aria-hidden="true" />
             <span>
             That the answer is right. In{" "}
-            <Link to="/app/r/2" className="underline underline-offset-2 hover:text-bronze-text">
+            <Link to="/app/r/base/2" className="underline underline-offset-2 hover:text-bronze-text">
               dispute #2
             </Link>{" "}
             all three models said 9 is a prime number, and the oracle delivered that.</span>
@@ -188,6 +203,20 @@ function Limits() {
   );
 }
 
+function CodePanel({ name, code, wrap = false }: { name: string; code: string; wrap?: boolean }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-vault-line bg-vault p-4 text-vault-ink">
+      <div className="mb-3 flex items-center justify-between gap-2 border-b border-vault-line pb-3">
+        <span className="font-mono text-xs text-bronze-hi">{name}</span>
+        <CopyButton text={code} />
+      </div>
+      <pre className={`m-0 overflow-x-auto font-mono text-xs leading-relaxed ${wrap ? "break-all whitespace-pre-wrap" : ""}`}>
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
 function ForDevelopers() {
   return (
     <section id="developers" aria-labelledby="dev-heading" className="grid scroll-mt-6 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
@@ -195,27 +224,39 @@ function ForDevelopers() {
         <h2 id="dev-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
           Use it from your contract
         </h2>
+        <h3 className="m-0 font-display text-xl font-bold">From NEAR</h3>
+        <p className="m-0 text-muted [overflow-wrap:anywhere]">
+          Call <code className="font-mono text-sm">ask</code> on {NEAR_ORACLE_CONTRACT} with the deposit from <code className="font-mono text-sm">ask_deposit(question)</code> and{" "}
+          <code className="font-mono text-sm">callback: true</code>, and implement <code className="font-mono text-sm">on_answer(request_id, answer)</code>. The answer is the string YES, NO or UNKNOWN, and it also stays readable through{" "}
+          <code className="font-mono text-sm">near_request(request_id)</code>. The contract sketch shows the shape; dispute.psephex.testnet calls ask the same way.
+        </p>
+        <h3 className="m-0 font-display text-xl font-bold">From Solidity</h3>
         <p className="m-0 text-muted">
-          Call <code className="font-mono text-sm">ask</code> with the fee and implement <code className="font-mono text-sm">onAnswer</code>. AiOracle calls it with 0 for UNKNOWN, 1 for YES and 2 for NO, with up to 200,000 gas.
+          On Base or Arbitrum, call <code className="font-mono text-sm">ask</code> with the fee and implement <code className="font-mono text-sm">onAnswer</code>. AiOracle calls it with 0 for UNKNOWN, 1 for YES and 2 for NO, with up to 200,000 gas. YesNoClient.sol is the contract the test suite runs against AiOracle, not a sketch.
         </p>
         <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-muted">AiOracle</dt>
+          <dt className="text-muted">Oracle on NEAR</dt>
+          <dd className="m-0 font-mono text-xs break-all">{NEAR_ORACLE_CONTRACT}</dd>
+          <dt className="text-muted">NEAR deposit</dt>
+          <dd className="m-0">ask_deposit(question), extra comes back</dd>
+          <dt className="text-muted">AiOracle on Base</dt>
           <dd className="m-0 font-mono text-xs break-all">{AIORACLE_ADDRESS}</dd>
-          <dt className="text-muted">Fee</dt>
+          {ARBITRUM_AI_ORACLE && (
+            <>
+              <dt className="text-muted">AiOracle on Arbitrum</dt>
+              <dd className="m-0 font-mono text-xs break-all">{ARBITRUM_AI_ORACLE}</dd>
+            </>
+          )}
+          <dt className="text-muted">EVM fee</dt>
           <dd className="m-0">0.0001 ETH per question</dd>
           <dt className="text-muted">Question</dt>
           <dd className="m-0">up to 2000 bytes, answered YES, NO or UNKNOWN</dd>
         </dl>
-        <p className="m-0 text-sm text-muted">This is the contract the test suite runs against AiOracle, not a sketch.</p>
       </div>
-      <div className="min-w-0 rounded-2xl border border-vault-line bg-vault p-4 text-vault-ink">
-        <div className="mb-3 flex items-center justify-between gap-2 border-b border-vault-line pb-3">
-          <span className="font-mono text-xs text-bronze-hi">YesNoClient.sol</span>
-          <CopyButton text={clientSource} />
-        </div>
-        <pre className="m-0 overflow-x-auto font-mono text-xs leading-relaxed">
-          <code>{clientSource}</code>
-        </pre>
+      <div className="flex min-w-0 flex-col gap-4">
+        <CodePanel name="near CLI" code={NEAR_CLI_SNIPPET} wrap />
+        <CodePanel name="NEAR contract (Rust)" code={NEAR_CLIENT_SNIPPET} />
+        <CodePanel name="YesNoClient.sol" code={clientSource} />
       </div>
     </section>
   );
@@ -249,7 +290,7 @@ function HeroPath() {
 }
 
 export function Landing() {
-  usePageTitle("Psephex: an AI oracle for Base checked on NEAR");
+  usePageTitle("Psephex: an AI oracle that runs on NEAR");
   return (
     <div className="basalt-glow min-h-dvh">
       <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
@@ -276,14 +317,14 @@ export function Landing() {
         <main className="flex flex-col gap-24 pt-10 pb-24 sm:pt-14">
           <div className="flex flex-col gap-10">
             <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-16">
-              <HeroTitle text="Three AI models answer, NEAR checks that two agree, Base gets the verdict." />
+              <HeroTitle text="An AI oracle that runs on NEAR. Three models answer, NEAR keeps the verdict." />
               <div className="flex flex-col gap-6">
                 <p className="m-0 max-w-[52ch] text-base text-muted sm:text-lg">
-                  Psephex is a yes-or-no oracle for Base. Every answer is signed inside a TEE, a NEAR contract enforces two of three, and NEAR Chain Signatures write the result back to Base. No bridge, no oracle key on a server.
+                  Ask a yes-or-no question from NEAR and pay in NEAR. Three models answer inside TEEs, the NEAR contract checks that two agree, and the verdict lands in its state. Base and Arbitrum get the same verdict through NEAR Chain Signatures, with no bridge and no oracle key.
                 </p>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
                   <Button asChild size="lg">
-                    <Link to="/app">Try it on Base Sepolia</Link>
+                    <Link to="/app/new">Try it on NEAR testnet</Link>
                   </Button>
                   <a href="#proof" className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-bronze-text">
                     What it proves

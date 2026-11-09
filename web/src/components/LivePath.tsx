@@ -1,11 +1,12 @@
 import { m, useReducedMotion } from "motion/react";
-import { ArrowUpRight, Box, Coins, Cpu, ShieldCheck, Signature } from "lucide-react";
+import { ArrowUpRight, Box, Coins, Cpu, Database, ShieldCheck, Signature } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { Answer, RequestDetail } from "../api.js";
-import { explorer, ORACLE_EVM_ADDRESS } from "../deployment.js";
+import { explorer, NEAR_ORACLE_CONTRACT, ORACLE_EVM_ADDRESS } from "../deployment.js";
 import { ballots, modelLabel, type Ballot } from "../lib/ballots.js";
 import { displayText } from "../lib/text.js";
+import { SOURCE_NAME, SOURCE_SHORT } from "../sources.js";
 import { BallotDisc } from "./Ballots.js";
 import { BorderBeam } from "./ui/border-beam.js";
 
@@ -85,6 +86,9 @@ export function LivePath({ detail }: { detail: RequestDetail | null }) {
   const list = detail ? ballots(detail) : [];
   const verdict = detail?.answer ?? null;
   const agree = list.filter((b) => b.vote === verdict && verdict !== null).length;
+  const source = detail?.source ?? "near";
+  const evm = source !== "near";
+  const chain = SOURCE_SHORT[source];
   const nearOk = detail?.near.find((t) => t.ok === true);
   const baseOk = detail?.base.find((t) => t.status === "success");
   const seconds = detail?.timeToConfirmMs != null ? (detail.timeToConfirmMs / 1000).toFixed(1) : null;
@@ -100,16 +104,21 @@ export function LivePath({ detail }: { detail: RequestDetail | null }) {
           Latest verdict
         </h2>
         {detail && (
-          <Link to={`/app/r/${detail.id}`} className="text-sm font-medium text-bronze-text underline underline-offset-4 hover:text-ink">
+          <Link to={`/app/r/${detail.source}/${detail.id}`} className="text-sm font-medium text-bronze-text underline underline-offset-4 hover:text-ink">
             See how dispute #{detail.id} was decided
           </Link>
         )}
       </div>
-      <ol key={detail?.id ?? "empty"} className="relative m-0 grid list-none gap-8 p-0 xl:grid-cols-5 xl:gap-6">
+      <ol key={detail ? `${detail.source}-${detail.id}` : "empty"} className={`relative m-0 grid list-none gap-8 p-0 xl:gap-6 ${evm ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
         <Track />
-        <Node index={0} icon={<Box className="size-4" aria-hidden="true" />} where="Base Sepolia" title="Question asked">
+        <Node index={0} icon={<Box className="size-4" aria-hidden="true" />} where={SOURCE_NAME[source]} title="Question asked">
           <p className="m-0 line-clamp-4 text-ink break-words">{detail ? displayText(detail.question) : "Waiting for the first answered dispute."}</p>
-          {detail && <TxLink href={explorer.baseTx(detail.askedTx)}>Ask transaction</TxLink>}
+          {!detail && (
+            <p className="m-0">
+              <code className="font-mono text-xs text-ink">ask</code> with a NEAR deposit on {NEAR_ORACLE_CONTRACT}.
+            </p>
+          )}
+          {detail && <TxLink href={explorer.tx(source, detail.askedTx)}>Ask transaction</TxLink>}
         </Node>
         <Node index={1} icon={<Cpu className="size-4" aria-hidden="true" />} where="NEAR AI and Phala TEEs" title="Three models vote">
           <Votes list={list} />
@@ -125,23 +134,39 @@ export function LivePath({ detail }: { detail: RequestDetail | null }) {
           ) : (
             <p className="m-0">The verdict needs two matching signed answers.</p>
           )}
-          {nearOk && <TxLink href={explorer.nearTx(nearOk.txHash)}>NEAR transaction</TxLink>}
+          {nearOk && <TxLink href={explorer.tx("near", nearOk.txHash)}>NEAR transaction</TxLink>}
         </Node>
-        <Node index={3} icon={<Signature className="size-4" aria-hidden="true" />} where="NEAR Chain Signatures" title="MPC signs for Base">
-          <p className="m-0">
-            Sent from <span className="font-mono text-xs text-ink">{shortAddress(ORACLE_EVM_ADDRESS)}</span>, an address only NEAR MPC can sign for.
-          </p>
-        </Node>
-        <Node index={4} icon={<Coins className="size-4" aria-hidden="true" />} where="Base Sepolia" title="Base pays out">
-          {seconds ? (
-            <p className="m-0">
-              Answered on Base <span className="font-display text-2xl font-bold text-ink">{seconds} s</span> after the relayer saw it.
-            </p>
-          ) : (
-            <p className="m-0">AiOracle calls the asking contract with the answer.</p>
-          )}
-          {baseOk && <TxLink href={explorer.baseTx(baseOk.txHash)}>Answer transaction</TxLink>}
-        </Node>
+        {evm ? (
+          <>
+            <Node index={3} icon={<Signature className="size-4" aria-hidden="true" />} where="NEAR Chain Signatures" title={`MPC signs for ${chain}`}>
+              <p className="m-0">
+                Sent from <span className="font-mono text-xs text-ink">{shortAddress(ORACLE_EVM_ADDRESS)}</span>, an address only NEAR MPC can sign for.
+              </p>
+            </Node>
+            <Node index={4} icon={<Coins className="size-4" aria-hidden="true" />} where={SOURCE_NAME[source]} title={`${chain} pays out`}>
+              {seconds ? (
+                <p className="m-0">
+                  Answered on {chain} <span className="font-display text-2xl font-bold text-ink">{seconds} s</span> after the relayer saw it.
+                </p>
+              ) : (
+                <p className="m-0">AiOracle calls the asking contract with the answer.</p>
+              )}
+              {baseOk && <TxLink href={explorer.tx(source, baseOk.txHash)}>Answer transaction</TxLink>}
+            </Node>
+          </>
+        ) : (
+          <Node index={3} icon={<Database className="size-4" aria-hidden="true" />} where="NEAR contract state" title="Verdict stored on NEAR">
+            {seconds ? (
+              <p className="m-0">
+                Stored <span className="font-display text-2xl font-bold text-ink">{seconds} s</span> after the relayer saw the question.
+              </p>
+            ) : (
+              <p className="m-0">
+                The verdict stays in the contract, and <code className="font-mono text-xs text-ink">on_answer</code> goes to the asker if it asked for a callback.
+              </p>
+            )}
+          </Node>
+        )}
       </ol>
       {!still && <BorderBeam size={120} duration={10} borderWidth={1.5} colorFrom="var(--bronze-hi)" colorTo="var(--bronze-lo)" />}
     </section>

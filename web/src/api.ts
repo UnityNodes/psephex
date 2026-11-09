@@ -1,9 +1,23 @@
 import { z } from "zod/mini";
+import { CAIP2, SOURCES, type Source } from "./sources.js";
 
 const answer = z.enum(["YES", "NO", "UNKNOWN"]);
 const status = z.enum(["seen", "answering", "verified", "near_sent", "near_signed", "base_sent", "confirmed", "rejected", "failed"]);
 
+const source = z.enum(SOURCES);
+
+/**
+ * API v1 records carry no source, and every one of them came from Base. Until the v2 relayer is
+ * deployed everywhere, a missing source therefore means Base, so old links and cached responses
+ * keep pointing at the right chain instead of failing the schema.
+ */
+const origin = {
+  source: z._default(source, "base"),
+  chain: z._default(z.string(), CAIP2.base),
+};
+
 export const requestSummarySchema = z.object({
+  ...origin,
   id: z.int().check(z.positive()),
   question: z.string(),
   answer: z.nullable(answer),
@@ -15,6 +29,7 @@ export const requestSummarySchema = z.object({
 });
 
 export const requestDetailSchema = z.object({
+  ...origin,
   id: z.int().check(z.positive()),
   requester: z.string(),
   origin: z.nullable(z.string()),
@@ -63,12 +78,17 @@ export const modelSchema = z.object({
   attestation: z.nullable(z.object({ url: z.url(), howTo: z.string() })),
 });
 
-export const statsSchema = z.object({
+const statsShape = {
   total: z.number(),
   byStatus: z.record(z.string(), z.number()),
   answers: z.object({ YES: z.number(), NO: z.number(), UNKNOWN: z.number() }),
   answerShare: z.object({ YES: z.number(), NO: z.number(), UNKNOWN: z.number() }),
   avgSecondsSeenToConfirmed: z.nullable(z.number()),
+};
+
+export const statsSchema = z.object({
+  ...statsShape,
+  bySource: z.optional(z.partialRecord(source, z.object(statsShape))),
 });
 
 export const healthSchema = z.object({
@@ -79,7 +99,11 @@ export const healthSchema = z.object({
   errors: z.array(z.unknown()),
 });
 
-const pageMeta = z.object({ limit: z.number(), nextCursor: z.nullable(z.number()) });
+const cursor = z.pipe(
+  z.nullable(z.union([z.string(), z.number()])),
+  z.transform((c) => (c === null ? null : String(c))),
+);
+const pageMeta = z.object({ limit: z.number(), nextCursor: cursor });
 
 export type RequestSummary = z.infer<typeof requestSummarySchema>;
 export type RequestDetail = z.infer<typeof requestDetailSchema>;
@@ -92,13 +116,14 @@ export type Health = z.infer<typeof healthSchema>;
 
 export interface RequestPage {
   readonly items: readonly RequestSummary[];
-  readonly nextCursor: number | null;
+  readonly nextCursor: string | null;
 }
 
 export interface ListQuery {
   readonly limit: number;
-  readonly cursor?: number;
+  readonly cursor?: string;
   readonly status?: RequestStatus;
+  readonly source?: Source;
 }
 
 export class ApiError extends Error {
@@ -114,8 +139,8 @@ export class ApiError extends Error {
 const errorBody = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 
 export interface Api {
-  request(id: number): Promise<RequestDetail | null>;
-  verify(id: number): Promise<VerifyPlan>;
+  request(source: Source, id: number): Promise<RequestDetail | null>;
+  verify(source: Source, id: number): Promise<VerifyPlan>;
   requests(q: ListQuery): Promise<RequestPage>;
   models(): Promise<ModelView[]>;
   stats(): Promise<Stats>;
@@ -141,16 +166,17 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch): Api
   const one = <T extends z.ZodMiniType>(schema: T) => z.object({ data: schema });
 
   return {
-    async request(id) {
-      return (await get(`/requests/${id}`, one(requestDetailSchema), true))?.data ?? null;
+    async request(source, id) {
+      return (await get(`/requests/${source}/${id}`, one(requestDetailSchema), true))?.data ?? null;
     },
-    async verify(id) {
-      return (await get(`/requests/${id}/verify`, one(verifyPlanSchema)))!.data;
+    async verify(source, id) {
+      return (await get(`/requests/${source}/${id}/verify`, one(verifyPlanSchema)))!.data;
     },
     async requests(q) {
       const params = new URLSearchParams({ limit: String(q.limit) });
-      if (q.cursor !== undefined) params.set("cursor", String(q.cursor));
+      if (q.cursor !== undefined) params.set("cursor", q.cursor);
       if (q.status !== undefined) params.set("status", q.status);
+      if (q.source !== undefined) params.set("source", q.source);
       const page = (await get(`/requests?${params.toString()}`, z.object({ data: z.array(requestSummarySchema), meta: pageMeta })))!;
       return { items: page.data, nextCursor: page.meta.nextCursor };
     },

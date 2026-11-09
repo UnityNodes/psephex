@@ -64,7 +64,6 @@ const CONTRACT_ERRORS: Readonly<Record<string, string>> = {
   UnknownDispute: "There is no dispute with this number.",
 };
 
-
 export function questionBytes(question: string): number {
   return new TextEncoder().encode(question).length;
 }
@@ -90,7 +89,7 @@ export function validateDispute(input: DisputeInput, limits: DisputeLimits, clai
   return { ok: true, value: { question, counterparty: getAddress(rawCounterparty), stakeWei } };
 }
 
-export function describeTxError(err: unknown): string {
+export function describeTxError(err: unknown, chainName = "Base Sepolia"): string {
   if (err instanceof BaseError) {
     const reverted = err.walk((e) => e instanceof ContractFunctionRevertedError);
     if (reverted instanceof ContractFunctionRevertedError) {
@@ -100,6 +99,6 @@ export function describeTxError(err: unknown): string {
     if (err.walk((e) => e instanceof UserRejectedRequestError)) return "You rejected the transaction in your wallet.";
   }
   const text = err instanceof Error ? err.message : "";
-  if (/insufficient funds/i.test(text)) return "Not enough Base Sepolia ETH for the stake, fee and gas. Get test ETH from a faucet and try again.";
+  if (/insufficient funds/i.test(text)) return `Not enough ${chainName} ETH for the stake, fee and gas. Get test ETH from a faucet and try again.`;
   return "The transaction failed. Check your wallet for details.";
 }

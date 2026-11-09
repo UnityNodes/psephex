@@ -11,21 +11,21 @@ describe("api client", () => {
 
   it("parses real responses captured from the stage 5 API", async () => {
     const files: Record<string, unknown> = {
-      "/requests/7": evidence("request-7.json"),
-      "/requests/5": evidence("request-5.json"),
-      "/requests/7/verify": evidence("verify-7.json"),
+      "/requests/base/7": evidence("request-7.json"),
+      "/requests/base/5": evidence("request-5.json"),
+      "/requests/base/7/verify": evidence("verify-7.json"),
       "/requests?limit=20": evidence("requests.json"),
       "/models": evidence("models.json"),
       "/stats": evidence("stats.json"),
     };
     const fetch = vi.fn(async (url: string) => new Response(JSON.stringify(files[url.replace("https://api.test", "")]), { status: 200 }));
     const api = createApi("https://api.test", fetch as unknown as typeof globalThis.fetch);
-    const seven = await api.request(7);
-    expect(seven).toMatchObject({ id: 7, answer: "NO", status: "confirmed" });
+    const seven = await api.request("base", 7);
+    expect(seven).toMatchObject({ id: 7, answer: "NO", status: "confirmed", source: "base", chain: "eip155:84532" });
     expect(seven?.models).toHaveLength(3);
     expect(seven?.votes).toHaveLength(3);
-    expect((await api.request(5))?.status).toBe("failed");
-    expect((await api.verify(7)).steps.length).toBeGreaterThan(4);
+    expect((await api.request("base", 5))?.status).toBe("failed");
+    expect((await api.verify("base", 7)).steps.length).toBeGreaterThan(4);
     expect((await api.requests({ limit: 20 })).items.map((r) => r.id)).toEqual([7, 6, 5, 4, 3, 2, 1]);
     expect((await api.models())[0]?.attestation?.url).toMatch(/^https:\/\/cloud-api\.near\.ai\//);
     expect((await api.stats()).answers).toEqual({ YES: 3, NO: 1, UNKNOWN: 1 });
@@ -33,14 +33,31 @@ describe("api client", () => {
 
   it("returns null for a request the relayer has not seen yet", async () => {
     const api = createApi("https://api.test", respond(404, { error: { code: "not_found", message: "request 9 not found" } }) as unknown as typeof fetch);
-    expect(await api.request(9)).toBeNull();
+    expect(await api.request("near", 9)).toBeNull();
   });
 
-  it("builds list queries with cursor and status", async () => {
+  it("builds list queries with an opaque cursor, status and source", async () => {
     const fetch = respond(200, { data: [], meta: { limit: 5, nextCursor: null } });
     const api = createApi("https://api.test/", fetch as unknown as typeof globalThis.fetch);
-    await api.requests({ limit: 5, cursor: 12, status: "confirmed" });
-    expect(fetch).toHaveBeenCalledWith("https://api.test/requests?limit=5&cursor=12&status=confirmed", expect.anything());
+    await api.requests({ limit: 5, cursor: "near:12:2026-11-09", status: "confirmed", source: "near" });
+    expect(fetch).toHaveBeenCalledWith("https://api.test/requests?limit=5&cursor=near%3A12%3A2026-11-09&status=confirmed&source=near", expect.anything());
+  });
+
+  it("reads v2 records with their source and passes the cursor back as text", async () => {
+    const [first] = (evidence("requests.json") as { data: Record<string, unknown>[] }).data;
+    const body = { data: [{ ...first, id: 3, source: "near", chain: "near:testnet" }], meta: { limit: 1, nextCursor: "b3BhcXVl" } };
+    const api = createApi("https://api.test", respond(200, body) as unknown as typeof fetch);
+    const page = await api.requests({ limit: 1 });
+    expect(page.items[0]).toMatchObject({ id: 3, source: "near", chain: "near:testnet" });
+    expect(page.nextCursor).toBe("b3BhcXVl");
+    const legacy = createApi("https://api.test", respond(200, { data: [], meta: { limit: 1, nextCursor: 6 } }) as unknown as typeof fetch);
+    expect((await legacy.requests({ limit: 1 })).nextCursor).toBe("6");
+  });
+
+  it("rejects a record from an unknown source", async () => {
+    const [first] = (evidence("requests.json") as { data: Record<string, unknown>[] }).data;
+    const api = createApi("https://api.test", respond(200, { data: [{ ...first, source: "solana" }], meta: { limit: 1, nextCursor: null } }) as unknown as typeof fetch);
+    await expect(api.requests({ limit: 1 })).rejects.toThrow(/unexpected response/);
   });
 
   it("raises the API error code and message", async () => {

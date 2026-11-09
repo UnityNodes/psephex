@@ -2,6 +2,8 @@ import { useContext, type ReactNode } from "react";
 import { Route, Routes } from "react-router";
 import { WagmiContext, WagmiProvider } from "wagmi";
 import { NotFound } from "../components/NotFound.js";
+import { NearWalletProvider } from "../near/NearWalletProvider.js";
+import { LegacyRequestRedirect } from "../pages/RequestPage.js";
 import { ModelsPage } from "../pages/ModelsPage.js";
 import { wagmiConfig } from "../wagmi.js";
 import { AppShell } from "./AppShell.js";
@@ -20,15 +22,18 @@ function WithChain({ children }: { children: ReactNode }) {
 export default function Dashboard() {
   return (
     <WithChain>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<Overview />} />
-          <Route path="/new" element={<Overview overlay="new" />} />
-          <Route path="/r/:id" element={<Overview overlay="detail" />} />
-          <Route path="/models" element={<ModelsPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AppShell>
+      <NearWalletProvider>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<Overview />} />
+            <Route path="/new" element={<Overview overlay="new" />} />
+            <Route path="/r/:source/:id" element={<Overview overlay="detail" />} />
+            <Route path="/r/:id" element={<LegacyRequestRedirect />} />
+            <Route path="/models" element={<ModelsPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AppShell>
+      </NearWalletProvider>
     </WithChain>
   );
 }

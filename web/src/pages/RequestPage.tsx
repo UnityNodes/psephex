@@ -1,27 +1,31 @@
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
-import { formatEther } from "viem";
-import { useConfig, useConnection, useWriteContract } from "wagmi";
-import { simulateContract, waitForTransactionReceipt } from "wagmi/actions";
-import { disputeAbi } from "../abi.js";
+import { Link, Navigate, useParams } from "react-router";
 import type { RequestDetail } from "../api.js";
 import { Ballots } from "../components/Ballots.js";
+import { ChainBadge } from "../components/ChainBadge.js";
 import { Commands } from "../components/Commands.js";
 import { Steps } from "../components/Steps.js";
 import { Badge } from "../components/ui/badge.js";
-import { Button } from "../components/ui/button.js";
-import { shortAddress } from "../components/Wallet.js";
-import { STATUS_LABEL } from "./RecentDisputes.js";
-import { CHAIN } from "../chain.js";
-import { DISPUTE_ADDRESS, explorer } from "../deployment.js";
+import { explorer, NEAR_DISPUTE_CONTRACT } from "../deployment.js";
+import { evmChain, type EvmChainConfig } from "../evm-chains.js";
 import { useCase, useChainQuestionHash, useSettlementWinner } from "../chain-hooks.js";
 import { usePageTitle, useRequestDetail, useVerifyPlan } from "../hooks.js";
-import { describeTxError, displayText } from "../lib/dispute.js";
-import { ballots, canRefund, deriveProgress, questionMatchesChain, type CaseInfo, type Outcome, type StepKey } from "../lib/steps.js";
+import { displayText } from "../lib/dispute.js";
+import { statusLabel } from "../lib/status.js";
+import { ballots, canRefund, deriveProgress, questionMatchesChain, type CaseInfo, type StepKey } from "../lib/steps.js";
+import { useNearCase, useNearQuestionHash } from "../near/hooks.js";
+import { EXPLORER_NAME, isSource, SOURCE_NAME, SOURCE_SHORT, type EvmSource, type Source } from "../sources.js";
+import { outcomeText } from "./outcome.js";
+import { EvmRefundButton, NearRefundButton } from "./RefundButtons.js";
 
 const ID = /^[1-9]\d{0,14}$/;
 const CLOCK_MS = 5_000;
+
+export function LegacyRequestRedirect() {
+  const raw = useParams().id ?? "";
+  return <Navigate to={`/app/r/base/${encodeURIComponent(raw)}`} replace />;
+}
 
 function ExternalLink({ href, children }: { href: string | null; children: ReactNode }) {
   if (!href) return null;
@@ -33,39 +37,21 @@ function ExternalLink({ href, children }: { href: string | null; children: React
   );
 }
 
-function stepLinks(detail: RequestDetail | null): Partial<Record<StepKey, ReactNode>> {
+export function stepLinks(detail: RequestDetail | null): Partial<Record<StepKey, ReactNode>> {
   if (!detail) return {};
+  const source = detail.source;
   const nearOk = detail.near.find((t) => t.ok === true);
-  const baseOk = detail.base.find((t) => t.status === "success");
-  return {
-    asked: <ExternalLink href={explorer.baseTx(detail.askedTx)}>Ask transaction on Basescan</ExternalLink>,
-    near: nearOk ? <ExternalLink href={explorer.nearTx(nearOk.txHash)}>NEAR transaction on Nearblocks</ExternalLink> : null,
-    base: baseOk ? <ExternalLink href={explorer.baseTx(baseOk.txHash)}>Answer transaction on Basescan</ExternalLink> : null,
-  };
-}
-
-function outcomeText(outcome: Outcome, caseInfo: CaseInfo | null, detail: RequestDetail | null, now: bigint): string {
-  const stake = caseInfo ? `${formatEther(caseInfo.amount)} ETH` : "The stake";
-  switch (outcome) {
-    case "claimant":
-      return `YES. ${stake} went back to the claimant ${caseInfo ? shortAddress(caseInfo.claimant) : ""}.`;
-    case "counterparty":
-      return `NO. ${stake} went to the counterparty ${caseInfo ? shortAddress(caseInfo.counterparty) : ""}.`;
-    case "escalated":
-      return `UNKNOWN. The models could not decide, so the claimant can take back ${stake} now.`;
-    case "refunded":
-      if (detail && (detail.status === "failed" || detail.status === "rejected")) return `The relayer stopped this dispute (${detail.reason ?? detail.status}), and the stake of ${stake} was refunded to the claimant.`;
-      if (detail?.answer === "UNKNOWN") return `UNKNOWN, so the claimant took back ${stake}.`;
-      return `${stake} went back to the claimant.`;
-    case "settled":
-      return "The dispute is settled on Base. The Dispute contract on Basescan shows where the stake went.";
-    case "failed": {
-      const wait = caseInfo && now < caseInfo.deadline ? ` The refund opens in about ${Math.ceil(Number(caseInfo.deadline - now) / 60)} min.` : " The refund is open.";
-      return `The oracle stopped on this dispute: ${detail?.reason ?? "no reason recorded"}.${wait}`;
-    }
-    default:
-      return "Waiting for the answer. This page updates on its own.";
+  const nearLink = nearOk ? <ExternalLink href={explorer.tx("near", nearOk.txHash)}>NEAR transaction on Nearblocks</ExternalLink> : null;
+  if (source === "near") {
+    return { asked: <ExternalLink href={explorer.tx("near", detail.askedTx)}>Ask transaction on Nearblocks</ExternalLink>, stored: nearLink };
   }
+  const site = EXPLORER_NAME[source];
+  const deliveredOk = detail.base.find((t) => t.status === "success");
+  return {
+    asked: <ExternalLink href={explorer.tx(source, detail.askedTx)}>{`Ask transaction on ${site}`}</ExternalLink>,
+    near: nearLink,
+    delivered: deliveredOk ? <ExternalLink href={explorer.tx(source, deliveredOk.txHash)}>{`Answer transaction on ${site}`}</ExternalLink> : null,
+  };
 }
 
 function useNowSeconds(): bigint {
@@ -77,79 +63,26 @@ function useNowSeconds(): bigint {
   return now;
 }
 
-function RefundButton({ id, onDone }: { id: number; onDone: () => void }) {
-  const config = useConfig();
-  const { status, chainId, address } = useConnection();
-  const write = useWriteContract();
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const ready = status === "connected" && chainId === CHAIN.id;
-
-  async function handleRefund() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const { request } = await simulateContract(config, { address: DISPUTE_ADDRESS, abi: disputeAbi, functionName: "refund", args: [BigInt(id)], chainId: CHAIN.id, ...(address ? { account: address } : {}) });
-      const hash = await write.mutateAsync(request);
-      await waitForTransactionReceipt(config, { hash, chainId: CHAIN.id });
-      onDone();
-    } catch (err) {
-      setMessage(describeTxError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="mt-3 flex flex-col gap-2">
-      <Button type="button" disabled={!ready || busy} onClick={() => void handleRefund()} className="self-start">
-        {busy ? "Refunding…" : "Refund the stake to the claimant"}
-      </Button>
-      {!ready && <p className="m-0 text-xs text-muted">Connect a wallet on {CHAIN.name}. Anyone can send the refund; the stake always goes to the claimant.</p>}
-      {message && (
-        <p role="alert" className="m-0 text-sm text-no">
-          {message}
-        </p>
-      )}
-    </div>
-  );
+interface ChainState {
+  readonly caseInfo: CaseInfo | null;
+  readonly caseLoading: boolean;
+  readonly missing: boolean;
+  readonly chainHash: string | undefined;
+  readonly winner: string | null;
+  readonly settledLink: string | null;
+  readonly refund: ReactNode;
 }
 
-function isMissing(loading: boolean, c: CaseInfo | null, d: RequestDetail | null): boolean {
-  return !loading && c !== null && /^0x0{40}$/i.test(c.claimant) && d === null;
-}
-
-function notFoundTitle(id: number, c: CaseInfo | null, d: RequestDetail | null): string {
-  return isMissing(false, c, d) ? "No dispute with this number yet" : `Dispute #${id}`;
-}
-
-export function RequestPage() {
-  const raw = useParams().id ?? "";
-  const valid = ID.test(raw);
-  const id = valid ? Number(raw) : 0;
-  const now = useNowSeconds();
-  usePageTitle(valid ? `Dispute #${id} - Psephex` : "Not found - Psephex");
-  const caseInfo = useCase(id, valid);
-  const detail = useRequestDetail(id, valid);
-  const d = detail.data ?? null;
-  const terminal = d !== null && (d.status === "confirmed" || d.status === "failed" || d.status === "rejected");
-  const verify = useVerifyPlan(id, valid && terminal);
-  const chainHash = useChainQuestionHash(id, valid);
-  const winner = useSettlementWinner(d?.base.find((t) => t.status === "success")?.txHash, id);
-
-  if (!valid) {
-    return (
-      <p>
-        There is no dispute with this number. <Link to="/app">Open a dispute</Link>.
-      </p>
-    );
-  }
-
-  const progress = deriveProgress({ detail: d, caseInfo: caseInfo.data, winner });
-  const matches = d ? questionMatchesChain(d.question, chainHash) : null;
-  const plan = verify.data && verify.data.requestId === id && chainHash && verify.data.questionHash.toLowerCase() === chainHash.toLowerCase() ? verify.data : null;
-  const title = d && matches !== false ? displayText(d.question) : notFoundTitle(id, caseInfo.data, d);
-  const notFound = isMissing(caseInfo.isLoading, caseInfo.data, d);
+function RequestView({ source, id, detail, apiError, chain, now }: { source: Source; id: number; detail: RequestDetail | null; apiError: boolean; chain: ChainState; now: bigint }) {
+  const terminal = detail !== null && (detail.status === "confirmed" || detail.status === "failed" || detail.status === "rejected");
+  const verify = useVerifyPlan(source, id, terminal);
+  const chainName = SOURCE_SHORT[source];
+  const progress = deriveProgress({ detail, caseInfo: chain.caseInfo, winner: chain.winner, source });
+  const matches = detail ? questionMatchesChain(detail.question, chain.chainHash) : null;
+  const plan = verify.data && verify.data.requestId === id && chain.chainHash && verify.data.questionHash.toLowerCase() === chain.chainHash.toLowerCase() ? verify.data : null;
+  const notFound = !chain.caseLoading && chain.missing && detail === null;
+  const title = detail && matches !== false ? displayText(detail.question) : notFound ? "No dispute with this number yet" : `Dispute #${id}`;
+  const stopped = detail !== null && (detail.status === "failed" || detail.status === "rejected");
 
   return (
     <article className="flex min-w-0 flex-col gap-10">
@@ -161,14 +94,15 @@ export function RequestPage() {
             </Link>{" "}
             / #{id}
           </span>
-          {d && <Badge variant="outline">{STATUS_LABEL[d.status]}</Badge>}
+          <ChainBadge source={source} />
+          {detail && <Badge variant="outline">{statusLabel(detail.status, source)}</Badge>}
         </div>
         <h1 className="m-0 max-w-[34ch] font-display text-2xl leading-tight font-bold break-words sm:text-3xl">{title}</h1>
-        {notFound && <p className="m-0 text-muted">If you just opened it, wait a few seconds for Base to include the transaction.</p>}
-        {matches === true && <p className="m-0 text-sm text-muted">This text matches the question hash stored on Base.</p>}
+        {notFound && <p className="m-0 text-muted">If you just opened it, wait a few seconds for {SOURCE_NAME[source]} to include the transaction.</p>}
+        {matches === true && <p className="m-0 text-sm text-muted">This text matches the question hash stored on {chainName}.</p>}
         {matches === false && (
           <p role="alert" className="m-0 text-sm text-no">
-            The API returned a question that does not match the hash stored on Base, so it is not shown.
+            The API returned a question that does not match the hash stored on {chainName}, so it is not shown.
           </p>
         )}
       </header>
@@ -178,17 +112,17 @@ export function RequestPage() {
           <h2 id="votes-heading" className="m-0 font-display text-2xl font-semibold">
             The vote
           </h2>
-          <Ballots ballots={d ? ballots(d) : []} verdict={d?.answer ?? null} stopped={d !== null && (d.status === "failed" || d.status === "rejected")} />
+          <Ballots ballots={detail ? ballots(detail) : []} verdict={detail?.answer ?? null} stopped={stopped} />
           <div role="status" className="rounded-xl border border-line border-l-4 border-l-bronze bg-paper p-5">
-            {detail.isError && <p className="m-0 text-no">The Psephex API did not answer. This page retries on its own; the chain data below is still live.</p>}
-            {!detail.isError && (d !== null || notFound) && <p className="m-0 [overflow-wrap:anywhere]">{outcomeText(progress.outcome, caseInfo.data, d, now)}</p>}
-            {!detail.isError && d === null && !notFound && <p className="m-0 text-muted">Loading the dispute…</p>}
-            {progress.outcome === "settled" && (
-              <a href={explorer.baseAddress(DISPUTE_ADDRESS) ?? undefined} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm underline underline-offset-2 hover:text-bronze-text">
-                Dispute contract on Basescan
+            {apiError && <p className="m-0 text-no">The Psephex API did not answer. This page retries on its own; the chain data below is still live.</p>}
+            {!apiError && (detail !== null || notFound) && <p className="m-0 [overflow-wrap:anywhere]">{outcomeText(progress.outcome, chain.caseInfo, detail, now, source)}</p>}
+            {!apiError && detail === null && !notFound && <p className="m-0 text-muted">Loading the dispute…</p>}
+            {progress.outcome === "settled" && chain.settledLink && (
+              <a href={chain.settledLink} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm underline underline-offset-2 hover:text-bronze-text">
+                Dispute contract on {EXPLORER_NAME[source]}
               </a>
             )}
-            {canRefund(caseInfo.data, now) && <RefundButton id={id} onDone={() => void caseInfo.refetch()} />}
+            {canRefund(chain.caseInfo, now) && chain.refund}
           </div>
         </section>
 
@@ -196,7 +130,7 @@ export function RequestPage() {
           <h2 id="path-heading" className="m-0 mb-6 font-display text-2xl font-semibold">
             The path of this dispute
           </h2>
-          <Steps steps={progress.steps} links={stepLinks(d)} />
+          <Steps steps={progress.steps} links={stepLinks(detail)} />
         </section>
       </div>
 
@@ -206,14 +140,74 @@ export function RequestPage() {
             Check it yourself
           </h2>
           <p className="m-0 max-w-[65ch] text-muted">
-            {plan.available
-              ? "These commands re-run the signature and 2-of-3 check on the NEAR contract and read the answer from Base."
-              : "The model signatures cannot be re-checked here; these commands confirm the question and the result on Base."}{" "}
-            They need <code className="font-mono text-sm">near</code>, <code className="font-mono text-sm">cast</code> and <code className="font-mono text-sm">jq</code>, and trust nothing but the two chains.
+            {source === "near"
+              ? "These commands re-run the signature and 2-of-3 check on the NEAR contract and read the stored verdict from its state."
+              : plan.available
+                ? `These commands re-run the signature and 2-of-3 check on the NEAR contract and read the answer from ${chainName}.`
+                : `The model signatures cannot be re-checked here; these commands confirm the question and the result on ${chainName}.`}{" "}
+            They need <code className="font-mono text-sm">near</code>
+            {source === "near" ? "" : <>, <code className="font-mono text-sm">cast</code></>} and <code className="font-mono text-sm">jq</code>, and trust nothing but the chains.
           </p>
           <Commands plan={plan} />
         </section>
       )}
     </article>
   );
+}
+
+function EvmRequest({ cfg, id, now }: { cfg: EvmChainConfig; id: number; now: bigint }) {
+  const caseInfo = useCase(cfg, id, true);
+  const detail = useRequestDetail(cfg.source, id, true);
+  const d = detail.data ?? null;
+  const chainHash = useChainQuestionHash(cfg, id, true);
+  const winner = useSettlementWinner(cfg, d?.base.find((t) => t.status === "success")?.txHash, id);
+  const chain: ChainState = {
+    caseInfo: caseInfo.data,
+    caseLoading: caseInfo.isLoading,
+    missing: caseInfo.data !== null && /^0x0{40}$/i.test(caseInfo.data.claimant),
+    chainHash,
+    winner,
+    settledLink: explorer.address(cfg.source, cfg.dispute),
+    refund: <EvmRefundButton cfg={cfg} id={id} onDone={() => void caseInfo.refetch()} />,
+  };
+  return <RequestView source={cfg.source} id={id} detail={d} apiError={detail.isError} chain={chain} now={now} />;
+}
+
+function NearRequest({ id, now }: { id: number; now: bigint }) {
+  const nearCase = useNearCase(id, true);
+  const detail = useRequestDetail("near", id, true);
+  const chainHash = useNearQuestionHash(id, true);
+  const chain: ChainState = {
+    caseInfo: nearCase.data,
+    caseLoading: nearCase.isLoading,
+    missing: !nearCase.isLoading && nearCase.data === null,
+    chainHash,
+    winner: nearCase.winner,
+    settledLink: explorer.address("near", NEAR_DISPUTE_CONTRACT),
+    refund: <NearRefundButton id={id} onDone={() => void nearCase.refetch()} />,
+  };
+  return <RequestView source="near" id={id} detail={detail.data ?? null} apiError={detail.isError} chain={chain} now={now} />;
+}
+
+export function RequestPage() {
+  const params = useParams();
+  const rawSource = params.source ?? "base";
+  const raw = params.id ?? "";
+  const source: Source | null = isSource(rawSource) ? rawSource : null;
+  const valid = source !== null && ID.test(raw);
+  const id = valid ? Number(raw) : 0;
+  const now = useNowSeconds();
+  usePageTitle(valid ? `Dispute #${id} - Psephex` : "Not found - Psephex");
+
+  if (!valid) {
+    return (
+      <p>
+        There is no dispute with this number. <Link to="/app">Open a dispute</Link>.
+      </p>
+    );
+  }
+  if (source === "near") return <NearRequest key={id} id={id} now={now} />;
+  const cfg = evmChain(source as EvmSource);
+  if (!cfg) return <p>{SOURCE_NAME[source]} is not configured in this build, so its disputes cannot be read here.</p>;
+  return <EvmRequest key={`${source}-${id}`} cfg={cfg} id={id} now={now} />;
 }

@@ -6,7 +6,7 @@ import { Mark } from "../components/SiteHeader.js";
 import { ThemeToggle } from "../components/ThemeToggle.js";
 import { Button } from "../components/ui/button.js";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../components/ui/sheet.js";
-import { Wallet } from "../components/Wallet.js";
+import { NearAccount } from "../components/NearAccount.js";
 import { NetworkStatus } from "./NetworkStatus.js";
 
 const ITEM = ({ isActive }: { isActive: boolean }) =>
@@ -90,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="sr-only sm:not-sr-only">Psephex</span>
           </Link>
           <div className="ml-auto flex items-center gap-2">
-            <Wallet />
+            <NearAccount />
           </div>
         </header>
         <main className="flex-1 px-4 py-8 sm:px-8 lg:py-10">{children}</main>

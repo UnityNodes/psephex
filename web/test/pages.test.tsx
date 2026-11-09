@@ -18,7 +18,9 @@ import { DisputeForm } from "../src/pages/DisputeForm.js";
 import { RequestPage } from "../src/pages/RequestPage.js";
 import { App } from "../src/App.js";
 import { ThemeProvider } from "../src/components/theme-provider.js";
+import { NearWalletContext } from "../src/near/wallet.js";
 import { CLAIMANT, COUNTERPARTY, evidence } from "./fixtures.js";
+import { fakeNearWallet } from "./near-fakes.js";
 
 interface ChainCase {
   readonly escalated: boolean;
@@ -121,10 +123,10 @@ function chainRpc(cases: Readonly<Record<number, ChainCase>>, hashes: Readonly<R
 
 function api(): Api {
   const files: Record<string, unknown> = {
-    "/requests/7": evidence("request-7.json"),
-    "/requests/7/verify": evidence("verify-7.json"),
-    "/requests/5": evidence("request-5.json"),
-    "/requests/5/verify": evidence("verify-5.json"),
+    "/requests/base/7": evidence("request-7.json"),
+    "/requests/base/7/verify": evidence("verify-7.json"),
+    "/requests/base/5": evidence("request-5.json"),
+    "/requests/base/5/verify": evidence("verify-5.json"),
   };
   const fetchImpl = vi.fn(async (url: string) => {
     const body = files[url.replace("https://api.test", "")];
@@ -143,6 +145,7 @@ function setup(node: ReactNode, path: string, cases: Readonly<Record<number, Cha
   return render(
     <ThemeProvider>
     <WagmiProvider config={config as unknown as typeof wagmiConfig}>
+      <NearWalletContext.Provider value={fakeNearWallet()}>
       <QueryClientProvider client={client}>
         <ApiProvider value={api()}>
           <MemoryRouter initialEntries={[path]}>
@@ -150,13 +153,14 @@ function setup(node: ReactNode, path: string, cases: Readonly<Record<number, Cha
               <App />
             ) : (
               <Routes>
-                <Route path="/app/r/:id" element={node} />
+                <Route path="/app/r/:source/:id" element={node} />
                 <Route path="/app" element={node} />
               </Routes>
             )}
           </MemoryRouter>
         </ApiProvider>
       </QueryClientProvider>
+      </NearWalletContext.Provider>
     </WagmiProvider>
     </ThemeProvider>,
   );
@@ -168,7 +172,7 @@ const APP = <App />;
 describe("App", () => {
   it("opens the landing at the root and the dashboard under /app", async () => {
     const landing = setup(APP, "/");
-    expect(await landing.findByRole("heading", { level: 1, name: /Three AI models answer/ })).toBeInTheDocument();
+    expect(await landing.findByRole("heading", { level: 1, name: /An AI oracle that runs on NEAR/ })).toBeInTheDocument();
     landing.unmount();
     const dashboard = setup(APP, "/app");
     expect(await dashboard.findByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();
@@ -186,8 +190,16 @@ describe("App", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();
   });
 
-  it("routes to a dispute and to an unknown page", async () => {
+  it("redirects a legacy /app/r/:id link to the Base dispute", async () => {
     setup(APP, "/app/r/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE } });
+    const sheet = await screen.findByRole("dialog", { name: "Dispute #7" });
+    expect(await within(sheet).findByRole("heading", { level: 1, name: /Is water made of carbon/ })).toBeInTheDocument();
+    expect(within(sheet).getByText("Base Sepolia")).toBeInTheDocument();
+    expect(within(sheet).getByText("Question recorded on Base")).toBeInTheDocument();
+  });
+
+  it("routes to a dispute and to an unknown page", async () => {
+    setup(APP, "/app/r/base/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE } });
     const sheet = await screen.findByRole("dialog", { name: "Dispute #7" });
     expect(await within(sheet).findByRole("heading", { name: "The path of this dispute" })).toBeInTheDocument();
     const other = setup(APP, "/app/nope");
@@ -197,7 +209,7 @@ describe("App", () => {
 
 describe("RequestPage", () => {
   it("shows a settled NO dispute with votes, the full path and the commands", async () => {
-    setup(<RequestPage />, "/app/r/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE, winner: COUNTERPARTY as Address } });
+    setup(<RequestPage />, "/app/r/base/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE, winner: COUNTERPARTY as Address } });
     expect(await screen.findByRole("heading", { level: 1, name: /Is water made of carbon/ })).toBeInTheDocument();
     expect(await screen.findByText(/NO\. 0\.001 ETH went to the counterparty 0xBc94…4799/)).toBeInTheDocument();
     expect(screen.getAllByText("(done)")).toHaveLength(5);
@@ -208,26 +220,26 @@ describe("RequestPage", () => {
   });
 
   it("offers the refund once a stopped dispute passes its deadline", async () => {
-    setup(<RequestPage />, "/app/r/5", { 5: { escalated: false, settled: false, deadline: 1n } });
+    setup(<RequestPage />, "/app/r/base/5", { 5: { escalated: false, settled: false, deadline: 1n } });
     expect(await screen.findByText(/The oracle stopped on this dispute: stuck in answering/)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Refund the stake to the claimant" })).toBeInTheDocument();
     expect(screen.getByText("(stopped)")).toBeInTheDocument();
   });
 
   it("hides a question that does not match the hash stored on Base", async () => {
-    setup(<RequestPage />, "/app/r/5", { 5: { escalated: false, settled: false, deadline: FAR_FUTURE } }, { 5: keccak256(stringToBytes("a different question")) });
+    setup(<RequestPage />, "/app/r/base/5", { 5: { escalated: false, settled: false, deadline: FAR_FUTURE } }, { 5: keccak256(stringToBytes("a different question")) });
     expect(await screen.findByText(/does not match the hash stored on Base/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Dispute #5");
     expect(screen.queryByRole("heading", { name: "Check it yourself" })).toBeNull();
   });
 
   it("says when the dispute does not exist yet", async () => {
-    setup(<RequestPage />, "/app/r/42");
+    setup(<RequestPage />, "/app/r/base/42");
     expect(await screen.findByRole("heading", { level: 1, name: "No dispute with this number yet" })).toBeInTheDocument();
   });
 
   it("rejects a malformed id", () => {
-    setup(<RequestPage />, "/app/r/abc");
+    setup(<RequestPage />, "/app/r/base/abc");
     expect(screen.getByText(/There is no dispute with this number/)).toBeInTheDocument();
   });
 });
@@ -250,7 +262,9 @@ describe("Wallet and DisputeForm", () => {
       </>,
       "/app",
     );
-    await user.click(screen.getByRole("button", { name: "Connect wallet" }));
+    expect(screen.getByRole("radio", { name: /NEAR testnet/ })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: /Base Sepolia/ }));
+    await user.click(screen.getAllByRole("button", { name: "Connect wallet" })[0] as HTMLElement);
     await user.click(await screen.findByRole("button", { name: /Translation late and short/ }));
     expect((screen.getByLabelText("Question with the evidence") as HTMLTextAreaElement).value).toContain("10 translated pages");
     expect(await screen.findByText(/You pay/)).toHaveTextContent("0.0011 ETH");

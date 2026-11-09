@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -82,8 +82,9 @@ describe("Commands", () => {
 describe("RecentDisputes", () => {
   it("lists disputes from the API with links to their pages", async () => {
     render(withProviders(fixtureApi(), <RecentDisputes />));
-    const link = await screen.findByRole("link", { name: /#7 Is water made of carbon/ });
-    expect(link).toHaveAttribute("href", "/app/r/7");
+    const link = await screen.findByRole("link", { name: /^#7 .*Is water made of carbon/ });
+    expect(link).toHaveAttribute("href", "/app/r/base/7");
+    expect(within(link).getAllByText("Base Sepolia").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link")).toHaveLength(7);
   });
 
@@ -94,6 +95,16 @@ describe("RecentDisputes", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Stopped" }));
     expect(spy).toHaveBeenLastCalledWith({ limit: 20, status: "failed" });
     expect(screen.getByRole("tab", { name: "Stopped" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("filters by chain with the source query", async () => {
+    const api = fixtureApi();
+    const spy = vi.spyOn(api, "requests");
+    render(withProviders(api, <RecentDisputes />));
+    const chains = screen.getByRole("group", { name: "Chain" });
+    await userEvent.click(within(chains).getByRole("button", { name: "NEAR" }));
+    expect(spy).toHaveBeenLastCalledWith({ limit: 20, source: "near" });
+    expect(within(chains).getByRole("button", { name: "NEAR" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 

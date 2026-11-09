@@ -2,6 +2,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createContext, useContext, useEffect } from "react";
 import { createApi, type Api, type RequestDetail, type RequestStatus } from "./api.js";
 import { API_URL } from "./deployment.js";
+import type { Source } from "./sources.js";
 
 const LIVE_POLL_MS = 3_000;
 const PAGE_SIZE = 20;
@@ -24,22 +25,23 @@ export function detailPollInterval(detail: RequestDetail | null | undefined): nu
   return detail && FINAL_STATUSES.has(detail.status) ? false : LIVE_POLL_MS;
 }
 
-export function useRequestDetail(id: number, enabled: boolean) {
+export function useRequestDetail(source: Source, id: number, enabled: boolean) {
   const api = useApi();
-  return useQuery({ queryKey: ["request", id], queryFn: () => api.request(id), enabled, refetchInterval: (q) => detailPollInterval(q.state.data) });
+  return useQuery({ queryKey: ["request", source, id], queryFn: () => api.request(source, id), enabled, refetchInterval: (q) => detailPollInterval(q.state.data) });
 }
 
-export function useVerifyPlan(id: number, enabled: boolean) {
+export function useVerifyPlan(source: Source, id: number, enabled: boolean) {
   const api = useApi();
-  return useQuery({ queryKey: ["verify", id], queryFn: () => api.verify(id), enabled });
+  return useQuery({ queryKey: ["verify", source, id], queryFn: () => api.verify(source, id), enabled });
 }
 
-export function useRequestPages(status: RequestStatus | undefined) {
+export function useRequestPages(status: RequestStatus | undefined, source: Source | undefined) {
   const api = useApi();
   return useInfiniteQuery({
-    queryKey: ["requests", status ?? "all"],
-    queryFn: ({ pageParam }) => api.requests({ limit: PAGE_SIZE, ...(pageParam === undefined ? {} : { cursor: pageParam }), ...(status ? { status } : {}) }),
-    initialPageParam: undefined as number | undefined,
+    queryKey: ["requests", status ?? "all", source ?? "all"],
+    queryFn: ({ pageParam }) =>
+      api.requests({ limit: PAGE_SIZE, ...(pageParam === undefined ? {} : { cursor: pageParam }), ...(status ? { status } : {}), ...(source ? { source } : {}) }),
+    initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: 15_000,
   });
@@ -58,8 +60,12 @@ export function useHealth() {
 export function useLatestVerdict() {
   const api = useApi();
   const latest = useQuery({ queryKey: ["latest-confirmed"], queryFn: () => api.requests({ limit: 1, status: "confirmed" }), refetchInterval: 30_000 });
-  const id = latest.data?.items[0]?.id;
-  const detail = useQuery({ queryKey: ["request", id], queryFn: () => api.request(id ?? 0), enabled: id !== undefined });
+  const first = latest.data?.items[0];
+  const detail = useQuery({
+    queryKey: ["request", first?.source, first?.id],
+    queryFn: () => (first ? api.request(first.source, first.id) : null),
+    enabled: first !== undefined,
+  });
   return { detail: detail.data ?? null, isError: latest.isError || detail.isError };
 }
 

@@ -8,6 +8,9 @@ import { defineConfig } from "vitest/config";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 const DEFAULT_RPC = "https://sepolia.base.org";
+const DEFAULT_ARBITRUM_RPC = "https://sepolia-rollup.arbitrum.io/rpc";
+const DEFAULT_NEAR_RPC = "https://rpc.testnet.near.org";
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 /**
  * A production bundle that silently falls back to a localhost API looks fine in review and breaks
@@ -39,14 +42,27 @@ function requireFonts(): void {
  */
 const STYLE_NONCE = randomBytes(16).toString("base64url");
 
-function contentSecurityPolicy(apiOrigin: string, rpcOrigin: string): Plugin {
+/**
+ * The page talks to the API and to the RPC of each chain it reads, and to nothing else. The
+ * MyNearWallet login and signing run in a separate window on its own origin and talk back by
+ * postMessage, so the wallet needs no entry here. Arbitrum is listed only when its contracts are
+ * configured, because a build without them never reads that chain.
+ */
+function connectOrigins(env: Record<string, string>): string[] {
+  const origins = [requireApiUrl(env.VITE_API_URL), new URL(env.VITE_BASE_RPC_URL || DEFAULT_RPC).origin, new URL(env.VITE_NEAR_RPC_URL || DEFAULT_NEAR_RPC).origin];
+  const arbitrum = EVM_ADDRESS.test(env.VITE_ARBITRUM_AI_ORACLE ?? "") && EVM_ADDRESS.test(env.VITE_ARBITRUM_DISPUTE ?? "");
+  if (arbitrum) origins.push(new URL(env.VITE_ARBITRUM_RPC_URL || DEFAULT_ARBITRUM_RPC).origin);
+  return [...new Set(origins)];
+}
+
+function contentSecurityPolicy(origins: readonly string[]): Plugin {
   const policy = [
     "default-src 'self'",
     "script-src 'self'",
     `style-src 'self' 'nonce-${STYLE_NONCE}'`,
     "img-src 'self' data:",
     "font-src 'self'",
-    `connect-src 'self' ${apiOrigin} ${rpcOrigin}`,
+    `connect-src 'self' ${origins.join(" ")}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
@@ -62,7 +78,7 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
   const plugins: PluginOption[] = [react(), tailwindcss()];
   if (command === "build") requireFonts();
-  if (command === "build") plugins.push(contentSecurityPolicy(requireApiUrl(env.VITE_API_URL), new URL(env.VITE_BASE_RPC_URL || DEFAULT_RPC).origin));
+  if (command === "build") plugins.push(contentSecurityPolicy(connectOrigins(env)));
   return {
     plugins,
     define: { __STYLE_NONCE__: JSON.stringify(command === "build" ? STYLE_NONCE : "") },
@@ -76,7 +92,7 @@ export default defineConfig(({ command, mode }) => {
       coverage: {
         provider: "v8",
         include: ["src/**/*.{ts,tsx}"],
-        exclude: ["src/main.tsx", "src/abi.ts", "src/vite-env.d.ts", "src/wagmi.ts"],
+        exclude: ["src/main.tsx", "src/abi.ts", "src/vite-env.d.ts", "src/wagmi.ts", "src/near/selector.ts"],
         thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
       },
     },

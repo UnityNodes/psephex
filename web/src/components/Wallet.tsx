@@ -1,6 +1,7 @@
 import { Wallet as WalletIcon } from "lucide-react";
+import { baseSepolia } from "viem/chains";
+import type { EvmChain } from "../evm-chains.js";
 import { useConnect, useConnection, useConnectors, useDisconnect, useSwitchChain } from "wagmi";
-import { CHAIN } from "../chain.js";
 import { Button } from "./ui/button.js";
 
 export function shortAddress(address: string): string {
@@ -14,7 +15,7 @@ function connectError(err: Error | null): string | null {
   return "The wallet did not connect. Open it and try again.";
 }
 
-export function Wallet() {
+export function Wallet({ chain = baseSepolia }: { chain?: EvmChain }) {
   const { address, chainId, status } = useConnection();
   const connectors = useConnectors();
   const connect = useConnect();
@@ -39,10 +40,10 @@ export function Wallet() {
     );
   }
 
-  if (chainId !== CHAIN.id) {
+  if (chainId !== chain.id) {
     return (
-      <Button type="button" variant="outline" disabled={switchChain.isPending} onClick={() => switchChain.mutate({ chainId: CHAIN.id })}>
-        {switchChain.isPending ? "Switching…" : `Switch to ${CHAIN.name}`}
+      <Button type="button" variant="outline" disabled={switchChain.isPending} onClick={() => switchChain.mutate({ chainId: chain.id })}>
+        {switchChain.isPending ? "Switching…" : `Switch to ${chain.name}`}
       </Button>
     );
   }
@@ -52,7 +53,7 @@ export function Wallet() {
       <span className="flex items-center gap-2">
         <span aria-hidden="true" className="size-2 rounded-full bg-yes" />
         <span className="font-mono">{shortAddress(address)}</span>
-        <span className="sr-only">connected to {CHAIN.name}</span>
+        <span className="sr-only">connected to {chain.name}</span>
       </span>
       <button type="button" onClick={() => disconnect.mutate()} className="min-h-11 text-muted underline-offset-2 hover:text-ink hover:underline">
         Disconnect

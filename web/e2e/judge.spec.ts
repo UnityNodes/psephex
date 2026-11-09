@@ -24,9 +24,9 @@ test("a judge with a fresh wallet opens a dispute and watches every step", async
     maxValueWei: parseEther("0.002"),
   });
 
-  await page.goto("/");
-  await expect(page).toHaveURL(/\/app$/);
-  await page.getByRole("button", { name: "Connect wallet" }).click();
+  await page.goto("/app/new");
+  await page.getByRole("radio", { name: /Base Sepolia/ }).check({ force: true });
+  await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
   await page.getByRole("button", { name: "Switch to Base Sepolia" }).click();
   await expect(page.getByText(`${address.slice(0, 6)}…${address.slice(-4)}`)).toBeVisible();
 
@@ -36,7 +36,7 @@ test("a judge with a fresh wallet opens a dispute and watches every step", async
   await page.screenshot({ path: `${SHOTS}/01-form.png`, fullPage: true });
   await page.getByRole("button", { name: "Open dispute" }).click();
 
-  await page.waitForURL(/\/app\/r\/\d+$/, { timeout: 120_000 });
+  await page.waitForURL(/\/app\/r\/base\/\d+$/, { timeout: 120_000 });
   const id = page.url().split("/").at(-1);
   test.info().annotations.push({ type: "dispute", description: `#${id} from ${address}` });
   await expect(page.getByText("Question recorded on Base (done)")).toBeVisible({ timeout: 60_000 });

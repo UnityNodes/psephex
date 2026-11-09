@@ -1,18 +1,17 @@
 import { useReadContract, useReadContracts, useTransactionReceipt } from "wagmi";
 import { aiOracleAbi, disputeAbi } from "./abi.js";
-import { CHAIN } from "./chain.js";
-import { AIORACLE_ADDRESS, DISPUTE_ADDRESS } from "./deployment.js";
+import type { EvmChainConfig } from "./evm-chains.js";
 import { settlementWinner, type CaseInfo } from "./lib/steps.js";
 
 const CASE_POLL_MS = 4_000;
 
-export function useCase(id: number, enabled: boolean): { data: CaseInfo | null; isLoading: boolean; refetch: () => unknown } {
+export function useCase(cfg: EvmChainConfig, id: number, enabled: boolean): { data: CaseInfo | null; isLoading: boolean; refetch: () => unknown } {
   const result = useReadContract({
-    address: DISPUTE_ADDRESS,
+    address: cfg.dispute,
     abi: disputeAbi,
     functionName: "getCase",
     args: [BigInt(id)],
-    chainId: CHAIN.id,
+    chainId: cfg.chain.id,
     query: { enabled, refetchInterval: (q) => (q.state.data?.settled ? false : CASE_POLL_MS) },
   });
   const c = result.data;
@@ -23,22 +22,22 @@ export function useCase(id: number, enabled: boolean): { data: CaseInfo | null; 
   };
 }
 
-export function useChainQuestionHash(id: number, enabled: boolean): string | undefined {
-  const result = useReadContract({ address: AIORACLE_ADDRESS, abi: aiOracleAbi, functionName: "getRequest", args: [BigInt(id)], chainId: CHAIN.id, query: { enabled } });
+export function useChainQuestionHash(cfg: EvmChainConfig, id: number, enabled: boolean): string | undefined {
+  const result = useReadContract({ address: cfg.aiOracle, abi: aiOracleAbi, functionName: "getRequest", args: [BigInt(id)], chainId: cfg.chain.id, query: { enabled } });
   return result.data?.questionHash;
 }
 
-export function useSettlementWinner(baseTxHash: string | undefined, id: number): string | null {
-  const receipt = useTransactionReceipt({ hash: baseTxHash as `0x${string}` | undefined, chainId: CHAIN.id, query: { enabled: baseTxHash !== undefined } });
-  return receipt.data ? settlementWinner(receipt.data.logs, id) : null;
+export function useSettlementWinner(cfg: EvmChainConfig, txHash: string | undefined, id: number): string | null {
+  const receipt = useTransactionReceipt({ hash: txHash as `0x${string}` | undefined, chainId: cfg.chain.id, query: { enabled: txHash !== undefined } });
+  return receipt.data ? settlementWinner(receipt.data.logs, id, cfg.dispute) : null;
 }
 
-export function useDisputeLimits() {
+export function useDisputeLimits(cfg: EvmChainConfig) {
   const result = useReadContracts({
     contracts: [
-      { address: AIORACLE_ADDRESS, abi: aiOracleAbi, functionName: "fee", chainId: CHAIN.id },
-      { address: AIORACLE_ADDRESS, abi: aiOracleAbi, functionName: "maxQuestionBytes", chainId: CHAIN.id },
-      { address: DISPUTE_ADDRESS, abi: disputeAbi, functionName: "minStake", chainId: CHAIN.id },
+      { address: cfg.aiOracle, abi: aiOracleAbi, functionName: "fee", chainId: cfg.chain.id },
+      { address: cfg.aiOracle, abi: aiOracleAbi, functionName: "maxQuestionBytes", chainId: cfg.chain.id },
+      { address: cfg.dispute, abi: disputeAbi, functionName: "minStake", chainId: cfg.chain.id },
     ],
     allowFailure: false,
   });

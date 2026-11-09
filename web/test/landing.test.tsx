@@ -20,7 +20,7 @@ function api(files: Record<string, unknown>): Api {
 const LIVE = {
   "/stats": evidence("stats.json"),
   "/requests?limit=1&status=confirmed": { data: [(evidence("requests.json") as { data: unknown[] }).data[0]], meta: { limit: 1, nextCursor: 6 } },
-  "/requests/7": evidence("request-7.json"),
+  "/requests/base/7": evidence("request-7.json"),
 };
 
 function renderLanding(files: Record<string, unknown>) {
@@ -41,20 +41,21 @@ function renderLanding(files: Record<string, unknown>) {
 describe("Landing", () => {
   it("states what Psephex does and sends people to the dashboard", () => {
     renderLanding(LIVE);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/three AI models/i);
-    const cta = screen.getByRole("link", { name: "Try it on Base Sepolia" });
-    expect(cta).toHaveAttribute("href", "/app");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/An AI oracle that runs on NEAR/);
+    expect(screen.getByText(/Ask a yes-or-no question from NEAR and pay in NEAR/)).toHaveTextContent(/Base and Arbitrum get the same verdict through NEAR Chain Signatures/);
+    const cta = screen.getByRole("link", { name: "Try it on NEAR testnet" });
+    expect(cta).toHaveAttribute("href", "/app/new");
   });
 
-  it("explains the five steps in order", () => {
+  it("explains the five steps in order, NEAR first", () => {
     renderLanding(LIVE);
     const steps = within(screen.getByRole("list", { name: "How a question is answered" })).getAllByRole("listitem");
     expect(steps.map((s) => s.querySelector("h3")?.textContent)).toEqual([
-      "Base records the question",
+      "You ask on NEAR and pay in NEAR",
       "Three models answer in TEEs",
       "NEAR checks two of three",
-      "NEAR MPC signs for Base",
-      "Base pays out",
+      "The verdict lands in NEAR state",
+      "Base and Arbitrum get the same verdict",
     ]);
   });
 
@@ -62,35 +63,38 @@ describe("Landing", () => {
     renderLanding(LIVE);
     const limits = screen.getByRole("region", { name: "What a verdict does not prove" });
     expect(limits).toHaveTextContent(/9 is a prime number/);
-    expect(within(limits).getByRole("link", { name: "dispute #2" })).toHaveAttribute("href", "/app/r/2");
+    expect(within(limits).getByRole("link", { name: "dispute #2" })).toHaveAttribute("href", "/app/r/base/2");
     expect(limits).toHaveTextContent(/one on Phala/);
     expect(screen.getByRole("region", { name: "What a verdict proves" })).toHaveTextContent(/80 of 80/);
   });
 
   it("shows live numbers and the latest verdict from the API", async () => {
     renderLanding(LIVE);
-    const numbers = await screen.findByRole("region", { name: "Live on Base Sepolia" });
+    const numbers = await screen.findByRole("region", { name: "Live on testnet" });
     await waitFor(() => expect(numbers).toHaveTextContent(/7 disputes/));
-    expect(numbers).toHaveTextContent(/5 answered on Base/);
+    expect(numbers).toHaveTextContent(/5 answered/);
     expect(numbers).toHaveTextContent(/3 YES, 1 NO and 1 UNKNOWN/);
     const latest = await screen.findByRole("region", { name: "Latest verdict" });
     expect(await within(latest).findByText(/Is water made of carbon/)).toBeInTheDocument();
     expect(latest).toHaveTextContent(/3 of 3 signed answers say NO/);
-    expect(within(latest).getByRole("link", { name: "See how dispute #7 was decided" })).toHaveAttribute("href", "/app/r/7");
+    expect(within(latest).getByRole("link", { name: "See how dispute #7 was decided" })).toHaveAttribute("href", "/app/r/base/7");
   });
 
   it("still reads when the API is down", async () => {
     renderLanding({});
     expect(await screen.findByText(/Live numbers are unavailable right now/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Try it on Base Sepolia" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Try it on NEAR testnet" })).toBeInTheDocument();
   });
 
-  it("shows the tested Solidity client and links the deployed contracts", () => {
+  it("shows the NEAR call before the Solidity client and links the deployed contracts", () => {
     renderLanding(LIVE);
     const dev = screen.getByRole("region", { name: "Use it from your contract" });
-    expect(dev).toHaveTextContent("function onAnswer(uint256 id, uint8 answer) external");
-    expect(dev).toHaveTextContent("contract YesNoClient is IAiOracleClient");
-    for (const name of ["AiOracle on Basescan", "Dispute on Basescan", "oracle.psephex.testnet on Nearblocks", "Oracle address on Basescan"]) {
+    const text = dev.textContent ?? "";
+    expect(text).toContain("pub fn on_answer(&mut self, request_id: u64, answer: String)");
+    expect(text).toContain("oracle.psephex.testnet ask json-args");
+    expect(text).toContain("contract YesNoClient is IAiOracleClient");
+    expect(text.indexOf("on_answer")).toBeLessThan(text.indexOf("function onAnswer(uint256 id, uint8 answer) external"));
+    for (const name of ["AiOracle on Basescan", "Dispute on Basescan", "oracle.psephex.testnet on Nearblocks", "dispute.psephex.testnet on Nearblocks", "Oracle address on Basescan"]) {
       expect(screen.getByRole("link", { name })).toHaveAttribute("rel", "noopener noreferrer");
     }
   });

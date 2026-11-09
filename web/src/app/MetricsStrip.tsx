@@ -49,7 +49,7 @@ function VerdictBar({ stats }: { stats: Stats }) {
         {answered > 0 && ORDER.map((a) => <span key={a} className={SEGMENT[a]} style={{ width: `${(stats.answers[a] / answered) * 100}%` }} />)}
       </m.div>
       <p className="m-0 font-sans text-xs font-normal text-muted">
-        {answered} answered on Base. A verdict needs two of the three signed answers to match.
+        {answered} answered on all chains. A verdict needs two of the three signed answers to match.
       </p>
     </div>
   );
@@ -63,13 +63,13 @@ export function MetricsStrip() {
   const stopped = s ? (s.byStatus.failed ?? 0) + (s.byStatus.rejected ?? 0) : 0;
   return (
     <section aria-label="Live numbers" className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line md:grid-cols-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-      <Cell icon={<Gauge className="size-3.5" aria-hidden="true" />} label="Verdicts on Base" lead>
+      <Cell icon={<Gauge className="size-3.5" aria-hidden="true" />} label="Verdicts" lead>
         {s ? <VerdictBar stats={s} /> : <Skeleton className="h-24 w-full" />}
       </Cell>
-      <Cell icon={<Scale className="size-3.5" aria-hidden="true" />} label="Disputes" note={s ? `${s.byStatus.confirmed ?? 0} answered on Base, ${stopped} stopped` : undefined}>
+      <Cell icon={<Scale className="size-3.5" aria-hidden="true" />} label="Disputes" note={s ? `${s.byStatus.confirmed ?? 0} answered, ${stopped} stopped` : undefined}>
         {s ? <NumberTicker value={s.total} /> : <Skeleton className="h-8 w-16" />}
       </Cell>
-      <Cell icon={<Clock className="size-3.5" aria-hidden="true" />} label="Time to answer" note="Average, from the relayer seeing a question to its answer on Base">
+      <Cell icon={<Clock className="size-3.5" aria-hidden="true" />} label="Time to answer" note="Average, from the relayer seeing a question to its answer on chain">
         {s?.avgSecondsSeenToConfirmed != null ? (
           <>
             <NumberTicker value={s.avgSecondsSeenToConfirmed} /> s
