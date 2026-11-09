@@ -1,5 +1,5 @@
 import { m, useReducedMotion } from "motion/react";
-import { Box, Check, Cpu, Database, ShieldCheck, Signature, X } from "lucide-react";
+import { Check, Cpu, FileText, Gavel, MessageSquareReply, ShieldCheck, X } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router";
 import clientSource from "../../../contracts/base/src/examples/YesNoClient.sol?raw";
@@ -10,12 +10,12 @@ import { SiteFooter } from "../components/SiteFooter.js";
 import { SiteHeader } from "../components/SiteHeader.js";
 import { Button } from "../components/ui/button.js";
 import { NumberTicker } from "../components/ui/number-ticker.js";
-import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, NEAR_ORACLE_CONTRACT } from "../deployment.js";
-import { NEAR_CLI_SNIPPET, NEAR_CLIENT_SNIPPET } from "../lib/snippets.js";
+import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, NEAR_COURT_CONTRACT, NEAR_ORACLE_CONTRACT } from "../deployment.js";
+import { COURT_CLI_SNIPPET, NEAR_CLIENT_SNIPPET, ORACLE_CLI_SNIPPET } from "../lib/snippets.js";
 import { SOURCES, SOURCE_SHORT } from "../sources.js";
 import { useLatestVerdict, usePageTitle, useStats } from "../hooks.js";
 
-const STEP_ICONS: readonly ReactNode[] = [Box, Cpu, ShieldCheck, Database, Signature].map((Icon, i) => <Icon key={i} className="size-4" aria-hidden="true" />);
+const STEP_ICONS: readonly ReactNode[] = [FileText, MessageSquareReply, Cpu, ShieldCheck, Gavel].map((Icon, i) => <Icon key={i} className="size-4" aria-hidden="true" />);
 
 function Reveal({ children, className, delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
   const still = useReducedMotion() === true || typeof IntersectionObserver === "undefined";
@@ -36,28 +36,33 @@ function Reveal({ children, className, delay = 0 }: { children: ReactNode; class
 const STEPS: readonly { title: string; body: string; where: string }[] = [
   {
     where: "NEAR",
-    title: "You ask on NEAR and pay in NEAR",
-    body: "Call ask on oracle.psephex.testnet with a yes-or-no question and the deposit that ask_deposit(question) returns: the fee plus the storage for the record. Any extra deposit comes back.",
+    title: "The buyer agent opens a case",
+    body: "An agent that ordered work and thinks it was not delivered calls open_case on psephex-court.testnet with a claim, its evidence, the seller's account and a stake in NEAR. Each text is up to 400 bytes.",
+  },
+  {
+    where: "NEAR",
+    title: "The seller agent answers",
+    body: "The agent that delivered the work has a response window to put its own evidence on the record with respond. If it stays silent, anyone can send the case on after the window and the record says there was no response.",
   },
   {
     where: "NEAR AI and Phala",
-    title: "Three models answer in TEEs",
-    body: "The relayer sends the exact request the NEAR contract built to DeepSeek V4.1 and Qwen3.6 on NEAR AI and to Gemma 4 on Phala. Every answer is signed inside a TEE.",
+    title: "Three models read both sides in TEEs",
+    body: "The court writes one question from both texts word for word, and anyone can read it with question_for. DeepSeek V4.1 and Qwen3.6 on NEAR AI and Gemma 4 on Phala answer it, each signed inside a TEE.",
   },
-  { where: "NEAR", title: "NEAR checks two of three", body: "oracle.psephex.testnet rebuilds the request from the question in its own state, checks every signature against the registered keys and needs two matching answers." },
   {
     where: "NEAR",
-    title: "The verdict lands in NEAR state",
-    body: "The contract stores the answer and the votes. If you asked with callback set, it calls on_answer(request_id, answer) on your contract.",
+    title: "NEAR checks two of three",
+    body: "oracle.psephex.testnet checks every signature against the registered keys, needs two matching answers and calls the court back. YES means the claim holds, NO means it does not.",
   },
   {
-    where: "NEAR Chain Signatures",
-    title: "Base and Arbitrum get the same verdict",
-    body: "For a question asked on Base or Arbitrum, the NEAR contract asks NEAR MPC to sign the answer transaction. AiOracle accepts it only from that MPC address. There is no bridge and no oracle key on a server.",
+    where: "NEAR and a person",
+    title: "Either side can appeal, then NEAR pays",
+    body: "During the appeal window either party can attach a bond and send the case to a human arbiter. Without an appeal, anyone calls finalize and the court pays the stake by the verdict: YES or UNKNOWN to the buyer, NO to the seller.",
   },
 ];
 
 const PROVES: readonly string[] = [
+  "Neither side wrote the question. The court contract builds it from the claim, the evidence and the response, quoted as they were filed, and both sides can read it before the models do.",
   "Each answer was signed inside a TEE by a key registered on NEAR and attested with a fresh nonce: the model's own key on NEAR AI, the gateway's key on Phala.",
   "At least two of the three signed answers agree. The NEAR contract checks this, not our server.",
   "The models saw the request the NEAR contract built from the stored question, with temperature 0 and a fixed seed inside the signed request.",
@@ -129,9 +134,9 @@ function HowItWorks() {
         <h2 id="how-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
           How it works
         </h2>
-        <p className="m-0 max-w-[44ch] text-muted">Every question passes through one NEAR contract and three enclaves. No step trusts our server: NEAR checks the signatures and keeps the verdict, and Base and Arbitrum only accept an answer signed by NEAR MPC.</p>
+        <p className="m-0 max-w-[44ch] text-muted">A case passes through two NEAR contracts and three enclaves. No step trusts our server: the court holds the stake and writes the question, and the oracle contract checks every signature and the two-of-three rule.</p>
       </div>
-      <ol aria-label="How a question is answered" className="m-0 flex list-none flex-col p-0">
+      <ol aria-label="How a case is decided" className="m-0 flex list-none flex-col p-0">
         {STEPS.map((s, i) => (
           <li key={s.title} className="border-t border-line py-6 last:border-b">
             <Reveal className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4" delay={i * 0.05}>
@@ -179,7 +184,7 @@ function Limits() {
             <Link to="/app/r/base/2" className="underline underline-offset-2 hover:text-bronze-text">
               dispute #2
             </Link>{" "}
-            all three models said 9 is a prime number, and the oracle delivered that.</span>
+            all three models said 9 is a prime number, and the oracle delivered that. The models can be wrong about a deal too, which is why the court has an appeal.</span>
           </li>
           <li>
             <X className="mt-1 size-4 text-no" aria-hidden="true" />
@@ -191,7 +196,11 @@ function Limits() {
           </li>
           <li>
             <X className="mt-1 size-4 text-no" aria-hidden="true" />
-            <span>Knowledge of fresh events. Put the evidence in the question itself.</span>
+            <span>That the evidence is true. The models judge only the text both sides put on the record; they do not open the delivered file or check a timestamp.</span>
+          </li>
+          <li>
+            <X className="mt-1 size-4 text-no" aria-hidden="true" />
+            <span>A decentralized appeal. The arbiter is one person today, set by the court owner, and cannot be a party to the case. If the arbiter does not rule in time, the verdict stands and the appellant gets the bond back.</span>
           </li>
           <li>
             <X className="mt-1 size-4 text-no" aria-hidden="true" />
@@ -222,23 +231,30 @@ function ForDevelopers() {
     <section id="developers" aria-labelledby="dev-heading" className="grid scroll-mt-6 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
       <div className="flex flex-col gap-4">
         <h2 id="dev-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
-          Use it from your contract
+          Use it from your agent or contract
         </h2>
-        <h3 className="m-0 font-display text-xl font-bold">From NEAR</h3>
+        <h3 className="m-0 font-display text-xl font-bold">An agent opens and answers a case</h3>
         <p className="m-0 text-muted [overflow-wrap:anywhere]">
-          Call <code className="font-mono text-sm">ask</code> on {NEAR_ORACLE_CONTRACT} with the deposit from <code className="font-mono text-sm">ask_deposit(question)</code> and{" "}
-          <code className="font-mono text-sm">callback: true</code>, and implement <code className="font-mono text-sm">on_answer(request_id, answer)</code>. The answer is the string YES, NO or UNKNOWN, and it also stays readable through{" "}
-          <code className="font-mono text-sm">near_request(request_id)</code>. The contract sketch shows the shape; dispute.psephex.testnet calls ask the same way.
+          The buyer agent reads <code className="font-mono text-sm">ask_deposit</code> on {NEAR_ORACLE_CONTRACT} for a 2000-byte question and <code className="font-mono text-sm">storage_deposit(claim, evidence)</code> on {NEAR_COURT_CONTRACT}, then calls{" "}
+          <code className="font-mono text-sm">open_case</code> with the stake plus both amounts attached. The oracle part is a reserve: the court pays the exact price once the question is final and sends the rest back. The seller agent calls{" "}
+          <code className="font-mono text-sm">respond(case_id, response)</code> within the window. After the verdict, a party can <code className="font-mono text-sm">appeal</code> with the bond, and anyone can <code className="font-mono text-sm">finalize</code> once the window ends.
+        </p>
+        <h3 className="m-0 font-display text-xl font-bold">A contract asks the oracle directly</h3>
+        <p className="m-0 text-muted [overflow-wrap:anywhere]">
+          Call <code className="font-mono text-sm">ask</code> on {NEAR_ORACLE_CONTRACT} with the deposit from <code className="font-mono text-sm">ask_deposit(question)</code> and <code className="font-mono text-sm">callback: true</code>, and implement{" "}
+          <code className="font-mono text-sm">on_answer(request_id, answer)</code>. The answer is YES, NO or UNKNOWN and stays readable through <code className="font-mono text-sm">near_request(request_id)</code>. The court is such a client.
         </p>
         <h3 className="m-0 font-display text-xl font-bold">From Solidity</h3>
         <p className="m-0 text-muted">
-          On Base or Arbitrum, call <code className="font-mono text-sm">ask</code> with the fee and implement <code className="font-mono text-sm">onAnswer</code>. AiOracle calls it with 0 for UNKNOWN, 1 for YES and 2 for NO, with up to 200,000 gas. YesNoClient.sol is the contract the test suite runs against AiOracle, not a sketch.
+          On Base or Arbitrum, call <code className="font-mono text-sm">ask</code> with the fee and implement <code className="font-mono text-sm">onAnswer</code>. AiOracle calls it with 0 for UNKNOWN, 1 for YES and 2 for NO, with up to 200,000 gas. NEAR signs that delivery through Chain Signatures. YesNoClient.sol is the contract the test suite runs against AiOracle, not a sketch.
         </p>
         <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+          <dt className="text-muted">Court on NEAR</dt>
+          <dd className="m-0 font-mono text-xs break-all">{NEAR_COURT_CONTRACT}</dd>
           <dt className="text-muted">Oracle on NEAR</dt>
           <dd className="m-0 font-mono text-xs break-all">{NEAR_ORACLE_CONTRACT}</dd>
-          <dt className="text-muted">NEAR deposit</dt>
-          <dd className="m-0">ask_deposit(question), extra comes back</dd>
+          <dt className="text-muted">Case texts</dt>
+          <dd className="m-0">claim, evidence and response, 400 bytes each, one line</dd>
           <dt className="text-muted">AiOracle on Base</dt>
           <dd className="m-0 font-mono text-xs break-all">{AIORACLE_ADDRESS}</dd>
           {ARBITRUM_AI_ORACLE && (
@@ -247,15 +263,14 @@ function ForDevelopers() {
               <dd className="m-0 font-mono text-xs break-all">{ARBITRUM_AI_ORACLE}</dd>
             </>
           )}
-          <dt className="text-muted">EVM fee</dt>
-          <dd className="m-0">0.0001 ETH per question</dd>
-          <dt className="text-muted">Question</dt>
+          <dt className="text-muted">Oracle question</dt>
           <dd className="m-0">up to 2000 bytes, answered YES, NO or UNKNOWN</dd>
         </dl>
       </div>
       <div className="flex min-w-0 flex-col gap-4">
-        <CodePanel name="near CLI" code={NEAR_CLI_SNIPPET} wrap />
-        <CodePanel name="NEAR contract (Rust)" code={NEAR_CLIENT_SNIPPET} />
+        <CodePanel name="Agents on the court (near CLI)" code={COURT_CLI_SNIPPET} wrap />
+        <CodePanel name="NEAR contract asking the oracle (Rust)" code={NEAR_CLIENT_SNIPPET} />
+        <CodePanel name="Oracle from the near CLI" code={ORACLE_CLI_SNIPPET} wrap />
         <CodePanel name="YesNoClient.sol" code={clientSource} />
       </div>
     </section>
@@ -290,7 +305,7 @@ function HeroPath() {
 }
 
 export function Landing() {
-  usePageTitle("Psephex: an AI oracle that runs on NEAR");
+  usePageTitle("Psephex: a judge for deals between AI agents, on NEAR");
   return (
     <div className="basalt-glow min-h-dvh">
       <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
@@ -317,14 +332,14 @@ export function Landing() {
         <main className="flex flex-col gap-24 pt-10 pb-24 sm:pt-14">
           <div className="flex flex-col gap-10">
             <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-16">
-              <HeroTitle text="An AI oracle that runs on NEAR. Three models answer, NEAR keeps the verdict." />
+              <HeroTitle text="A judge for deals between AI agents, running on NEAR." />
               <div className="flex flex-col gap-6">
                 <p className="m-0 max-w-[52ch] text-base text-muted sm:text-lg">
-                  Ask a yes-or-no question from NEAR and pay in NEAR. Three models answer inside TEEs, the NEAR contract checks that two agree, and the verdict lands in its state. Base and Arbitrum get the same verdict through NEAR Chain Signatures, with no bridge and no oracle key.
+                  An agent that ordered work and an agent that delivered it both put their evidence on the record. Three models in TEEs decide, NEAR checks that two agree and enforces the payout, and either side can appeal to a human arbiter. Underneath is a yes-or-no oracle any NEAR contract can call, and Base and Arbitrum get its verdicts through NEAR Chain Signatures.
                 </p>
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
                   <Button asChild size="lg">
-                    <Link to="/app/new">Try it on NEAR testnet</Link>
+                    <Link to="/app/new">Open a case on NEAR testnet</Link>
                   </Button>
                   <a href="#proof" className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-bronze-text">
                     What it proves

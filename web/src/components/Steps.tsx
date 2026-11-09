@@ -2,7 +2,14 @@ import { Check, X } from "lucide-react";
 import { m } from "motion/react";
 import type { ReactNode } from "react";
 import { useEnter } from "../lib/motion.js";
-import type { Step, StepState } from "../lib/steps.js";
+import type { StepState } from "../lib/steps.js";
+
+interface StepView {
+  readonly key: string;
+  readonly title: string;
+  readonly state: StepState;
+  readonly detail: string | null;
+}
 
 const MARK: Readonly<Record<StepState, { symbol: ReactNode; label: string; className: string }>> = {
   done: { symbol: <Check className="size-4" strokeWidth={2.5} />, label: "done", className: "bg-yes text-paper border-yes" },
@@ -25,7 +32,7 @@ function Connector({ index }: { index: number }) {
   return <m.span {...enter} aria-hidden="true" className="absolute top-8 left-[15px] h-[calc(100%-2rem)] w-0.5 origin-top bg-line" />;
 }
 
-export function Steps({ steps, links }: { steps: readonly Step[]; links?: Partial<Record<Step["key"], ReactNode>> }) {
+export function Steps({ steps, links }: { steps: readonly StepView[]; links?: Partial<Record<string, ReactNode>> }) {
   return (
     <ol className="m-0 list-none p-0">
       {steps.map((s, i) => {

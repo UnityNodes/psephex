@@ -172,7 +172,7 @@ const APP = <App />;
 describe("App", () => {
   it("opens the landing at the root and the dashboard under /app", async () => {
     const landing = setup(APP, "/");
-    expect(await landing.findByRole("heading", { level: 1, name: /An AI oracle that runs on NEAR/ })).toBeInTheDocument();
+    expect(await landing.findByRole("heading", { level: 1, name: /A judge for deals between AI agents/ })).toBeInTheDocument();
     landing.unmount();
     const dashboard = setup(APP, "/app");
     expect(await dashboard.findByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();
@@ -184,7 +184,8 @@ describe("App", () => {
   it("opens the new dispute form in a dialog and closes it back to the list", async () => {
     setup(APP, "/app/new");
     const dialog = await screen.findByRole("dialog", { name: "Open a dispute" });
-    expect(within(dialog).getByLabelText("Question with the evidence")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Claim")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Your evidence")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();

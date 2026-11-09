@@ -54,6 +54,19 @@ export function isNearAccount(value: string): boolean {
 }
 
 /**
+ * Every new NEAR case sends its stake to the court account, so an override that is not a plain
+ * NEAR account id stops the page instead of quietly falling back to the default court.
+ */
+export function nearAccountOr(raw: string | undefined, fallback: string): string {
+  const value = raw?.trim() ?? "";
+  if (value === "") return fallback;
+  if (!NEAR_ACCOUNT.test(value)) throw new Error(`expected a NEAR account id, got ${value}`);
+  return value;
+}
+
+export const NEAR_COURT_CONTRACT = nearAccountOr(import.meta.env.VITE_NEAR_COURT_CONTRACT, "psephex-court.testnet");
+
+/**
  * The Arbitrum contracts are deployed separately from this build, so their addresses arrive through
  * the environment. A malformed value would send stakes to the wrong place, so anything that is not
  * a plain 0x address switches the Arbitrum option off instead.

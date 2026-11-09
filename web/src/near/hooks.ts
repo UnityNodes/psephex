@@ -1,19 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import { NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT } from "../deployment.js";
-import type { NearDisputeConfig } from "../lib/near-dispute.js";
 import type { CaseInfo } from "../lib/steps.js";
-import { NearRpcError, useNearRpc, type NearRpc } from "./rpc.js";
+import { NearRpcError, useNearRpc } from "./rpc.js";
 
 const CASE_POLL_MS = 4_000;
-const PRICE_DEBOUNCE_MS = 350;
 const NS_PER_SECOND = 1_000_000_000n;
-
-interface RawConfig {
-  readonly oracle: string;
-  readonly timeout_sec: number;
-  readonly min_stake: string;
-}
 
 export interface NearCase {
   readonly claimant: string;
@@ -29,6 +20,7 @@ export interface NearCase {
 
 interface RawNearRequest {
   readonly question_hash: string;
+  readonly asker?: string;
 }
 
 export function caseInfoFrom(c: NearCase): CaseInfo {
@@ -50,41 +42,6 @@ export function checkNearPrices(prices: { askDeposit: bigint; storageDeposit: bi
   return prices;
 }
 
-export async function readNearPrices(rpc: NearRpc, question: string): Promise<{ askDeposit: bigint; storageDeposit: bigint }> {
-  const [ask, storage] = await Promise.all([
-    rpc.view<string>(NEAR_ORACLE_CONTRACT, "ask_deposit", { question }),
-    rpc.view<string>(NEAR_DISPUTE_CONTRACT, "storage_deposit", { question }),
-  ]);
-  return checkNearPrices({ askDeposit: BigInt(ask), storageDeposit: BigInt(storage) });
-}
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [current, setCurrent] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setCurrent(value), ms);
-    return () => clearTimeout(timer);
-  }, [value, ms]);
-  return current;
-}
-
-export function useNearDisputeConfig() {
-  const rpc = useNearRpc();
-  return useQuery({
-    queryKey: ["near", "dispute-config"],
-    queryFn: async (): Promise<NearDisputeConfig> => {
-      const c = await rpc.view<RawConfig>(NEAR_DISPUTE_CONTRACT, "config", {});
-      return { minStake: BigInt(c.min_stake), timeoutSec: c.timeout_sec };
-    },
-    staleTime: 60_000,
-  });
-}
-
-export function useNearPrices(question: string) {
-  const rpc = useNearRpc();
-  const debounced = useDebounced(question, PRICE_DEBOUNCE_MS);
-  return useQuery({ queryKey: ["near", "prices", debounced], queryFn: () => readNearPrices(rpc, debounced), enabled: debounced.length > 0, placeholderData: (prev) => prev });
-}
-
 export function useNearCase(id: number, enabled: boolean) {
   const rpc = useNearRpc();
   const result = useQuery({
@@ -97,8 +54,15 @@ export function useNearCase(id: number, enabled: boolean) {
   return { data: raw ? caseInfoFrom(raw) : null, winner: raw?.winner ?? null, isLoading: result.isLoading, refetch: result.refetch };
 }
 
-export function useNearQuestionHash(id: number, enabled: boolean): string | undefined {
+function useNearRequest(id: number, enabled: boolean) {
   const rpc = useNearRpc();
-  const result = useQuery({ queryKey: ["near", "request", id], queryFn: () => rpc.view<RawNearRequest | null>(NEAR_ORACLE_CONTRACT, "near_request", { request_id: id }), enabled });
-  return result.data?.question_hash;
+  return useQuery({ queryKey: ["near", "request", id], queryFn: () => rpc.view<RawNearRequest | null>(NEAR_ORACLE_CONTRACT, "near_request", { request_id: id }), enabled });
+}
+
+export function useNearQuestionHash(id: number, enabled: boolean): string | undefined {
+  return useNearRequest(id, enabled).data?.question_hash;
+}
+
+export function useNearAsker(id: number, enabled: boolean): string | undefined {
+  return useNearRequest(id, enabled).data?.asker;
 }

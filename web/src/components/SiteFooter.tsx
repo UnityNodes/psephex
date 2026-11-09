@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, ARBITRUM_DISPUTE, DISPUTE_ADDRESS, explorer, NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT, ORACLE_EVM_ADDRESS, REPO_URL, VIDEO_URL } from "../deployment.js";
+import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, ARBITRUM_DISPUTE, DISPUTE_ADDRESS, explorer, NEAR_COURT_CONTRACT, NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT, ORACLE_EVM_ADDRESS, REPO_URL, VIDEO_URL } from "../deployment.js";
 
 function FooterLink({ href, children }: { href: string | null; children: ReactNode }) {
   if (!href) return null;
@@ -17,6 +17,7 @@ function FooterLink({ href, children }: { href: string | null; children: ReactNo
 export function ChainLinks({ className = "flex flex-wrap gap-x-6" }: { className?: string }) {
   return (
     <ul className={`m-0 list-none p-0 ${className}`}>
+        <FooterLink href={explorer.nearAccount(NEAR_COURT_CONTRACT)}>{`${NEAR_COURT_CONTRACT} on Nearblocks`}</FooterLink>
         <FooterLink href={explorer.nearAccount(NEAR_ORACLE_CONTRACT)}>{`${NEAR_ORACLE_CONTRACT} on Nearblocks`}</FooterLink>
         <FooterLink href={explorer.nearAccount(NEAR_DISPUTE_CONTRACT)}>{`${NEAR_DISPUTE_CONTRACT} on Nearblocks`}</FooterLink>
         <FooterLink href={explorer.baseAddress(AIORACLE_ADDRESS)}>AiOracle on Basescan</FooterLink>

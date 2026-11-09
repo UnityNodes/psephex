@@ -3,7 +3,7 @@ import { ChainBadge } from "../components/ChainBadge.js";
 import { ARBITRUM, BASE, type EvmChainConfig } from "../evm-chains.js";
 import { SOURCE_NAME, type Source } from "../sources.js";
 import { EvmDisputeForm } from "./EvmDisputeForm.js";
-import { NearDisputeForm } from "./NearDisputeForm.js";
+import { CaseForm } from "./CaseForm.js";
 
 const PAYS: Readonly<Record<Source, string>> = { near: "Stake and pay in NEAR", base: "Stake and pay in ETH", arbitrum: "Stake and pay in ETH" };
 
@@ -40,7 +40,7 @@ export function DisputeForm({ arbitrum = ARBITRUM }: { arbitrum?: EvmChainConfig
         <ChainPicker value={source} onChange={setSource} options={options} />
         {!arbitrum && <p className="m-0 text-xs text-muted">Arbitrum Sepolia is not configured in this build, so it is not offered.</p>}
       </div>
-      {source === "near" ? <NearDisputeForm /> : evm && <EvmDisputeForm key={evm.source} cfg={evm} />}
+      {source === "near" ? <CaseForm /> : evm && <EvmDisputeForm key={evm.source} cfg={evm} />}
     </div>
   );
 }

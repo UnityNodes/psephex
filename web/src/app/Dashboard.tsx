@@ -28,6 +28,7 @@ export default function Dashboard() {
             <Route path="/" element={<Overview />} />
             <Route path="/new" element={<Overview overlay="new" />} />
             <Route path="/r/:source/:id" element={<Overview overlay="detail" />} />
+            <Route path="/case/:id" element={<Overview overlay="case" />} />
             <Route path="/r/:id" element={<LegacyRequestRedirect />} />
             <Route path="/models" element={<ModelsPage />} />
             <Route path="*" element={<NotFound />} />

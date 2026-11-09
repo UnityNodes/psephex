@@ -7,10 +7,10 @@ import { keccak256, stringToBytes } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { createApi, requestDetailSchema, type Api, type RequestDetail } from "../src/api.js";
 import { ChainBadge } from "../src/components/ChainBadge.js";
-import { explorer, NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT } from "../src/deployment.js";
+import { explorer, NEAR_COURT_CONTRACT, NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT } from "../src/deployment.js";
 import { BASE } from "../src/evm-chains.js";
 import { ApiProvider } from "../src/hooks.js";
-import { describeNearError, formatNear, nearDepositTotal, roundedAmount, OPEN_DISPUTE_GAS, parseNear, requestIdFrom, validateNearDispute } from "../src/lib/near-dispute.js";
+import { describeNearError, formatNear, roundedAmount, parseNear } from "../src/lib/near-dispute.js";
 import { statusLabel } from "../src/lib/status.js";
 import { deriveProgress, stepOrder } from "../src/lib/steps.js";
 import { caseInfoFrom, checkNearPrices, type NearCase } from "../src/near/hooks.js";
@@ -92,9 +92,9 @@ function renderNear(node: ReactNode, { path, wallet, rpc, api = apiWith({}) }: {
 }
 
 const PRICES = {
-  [`${NEAR_DISPUTE_CONTRACT}.config`]: { oracle: NEAR_ORACLE_CONTRACT, timeout_sec: 3600, min_stake: MIN_STAKE.toString() },
+  [`${NEAR_COURT_CONTRACT}.config`]: { oracle: NEAR_ORACLE_CONTRACT, arbiter: "psephex.testnet", min_stake: MIN_STAKE.toString(), appeal_bond: MIN_STAKE.toString(), response_window_sec: 120, appeal_window_sec: 120, answer_timeout_sec: 900, arbitration_window_sec: 3600, max_field_bytes: 400, last_case_id: 0 },
   [`${NEAR_ORACLE_CONTRACT}.ask_deposit`]: ASK.toString(),
-  [`${NEAR_DISPUTE_CONTRACT}.storage_deposit`]: STORAGE.toString(),
+  [`${NEAR_COURT_CONTRACT}.storage_deposit`]: STORAGE.toString(),
 };
 
 describe("chain picker", () => {
@@ -105,7 +105,7 @@ describe("chain picker", () => {
     expect(radios.map((r) => (r as HTMLInputElement).value)).toEqual(["near", "base"]);
     expect(within(picker).getByRole("radio", { name: /NEAR testnet/ })).toBeChecked();
     expect(screen.getByText(/Arbitrum Sepolia is not configured/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Counterparty account")).toHaveAttribute("placeholder", "bob.testnet");
+    expect(screen.getByLabelText("Counterparty account")).toHaveAttribute("placeholder", "seller-agent.testnet");
   });
 
   it("offers Arbitrum Sepolia as a third chain once it is configured", () => {
@@ -118,65 +118,12 @@ describe("chain picker", () => {
   });
 });
 
-describe("NEAR deposit", () => {
-  it("attaches stake plus ask_deposit plus storage_deposit", () => {
-    expect(nearDepositTotal({ stake: MIN_STAKE, askDeposit: ASK, storageDeposit: STORAGE })).toBe(MIN_STAKE + ASK + STORAGE);
+describe("NEAR amounts", () => {
+  it("parses and formats NEAR amounts exactly", () => {
     expect(formatNear(MIN_STAKE + ASK + STORAGE)).toBe("0.112");
     expect(parseNear("0.1")).toBe(MIN_STAKE);
     expect(parseNear("1.0000000000000000000000001")).toBeNull();
     expect(parseNear("-1")).toBeNull();
-  });
-
-  it("shows the total and opens the dispute with that deposit and 100 Tgas", async () => {
-    const user = userEvent.setup();
-    const wallet = fakeNearWallet({ accountId: "alice.testnet" });
-    const rpc = fakeNearRpc(PRICES, { ok: true, value: 4 });
-    renderNear(<DisputeForm arbitrum={null} />, { path: "/app/new", wallet, rpc });
-    await user.click(screen.getByRole("button", { name: /Logo delivered as specified/ }));
-    await user.type(screen.getByLabelText("Counterparty account"), "bob.testnet");
-    expect(await screen.findByText(/You attach/)).toHaveTextContent("You attach 0.112 NEAR: the stake, the 0.005 NEAR oracle deposit and up to 0.007 NEAR");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Open dispute" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Open dispute" }));
-    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/r/near/4"));
-    expect(wallet.call).toHaveBeenCalledWith({
-      receiverId: NEAR_DISPUTE_CONTRACT,
-      methodName: "open_dispute",
-      args: { question: expect.stringContaining("deliver a logo"), counterparty: "bob.testnet", oracle_deposit: ASK.toString() },
-      gas: OPEN_DISPUTE_GAS,
-      deposit: MIN_STAKE + ASK + STORAGE,
-    });
-    expect(OPEN_DISPUTE_GAS).toBe(100n * 10n ** 12n);
-    expect(rpc.txResult).toHaveBeenCalledWith(NEAR_TX, "alice.testnet");
-  });
-
-  it("stops before signing when the counterparty account does not exist", async () => {
-    const user = userEvent.setup();
-    const wallet = fakeNearWallet({ accountId: "alice.testnet" });
-    renderNear(<DisputeForm arbitrum={null} />, { path: "/app/new", wallet, rpc: fakeNearRpc(PRICES, { ok: true, value: 4 }, ["alice.testnet", "bob.testnet"]) });
-    await user.type(screen.getByLabelText("Question with the evidence"), "Was it delivered?");
-    await user.type(screen.getByLabelText("Counterparty account"), "b0b.testnet");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Open dispute" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Open dispute" }));
-    expect(await screen.findByText(/b0b.testnet does not exist on NEAR testnet/)).toBeInTheDocument();
-    expect(wallet.call).not.toHaveBeenCalled();
-  });
-
-  it("asks again instead of signing when the deposit changed after it was shown", async () => {
-    const user = userEvent.setup();
-    const wallet = fakeNearWallet({ accountId: "alice.testnet" });
-    const rpc = fakeNearRpc(PRICES);
-    renderNear(<DisputeForm arbitrum={null} />, { path: "/app/new", wallet, rpc });
-    await user.type(screen.getByLabelText("Question with the evidence"), "Was it delivered?");
-    await user.type(screen.getByLabelText("Counterparty account"), "bob.testnet");
-    await screen.findByText(/You attach/);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Open dispute" })).toBeEnabled());
-    rpc.view.mockImplementation(async (contract: string, method: string) => {
-      if (method === "ask_deposit") return (ASK * 2n).toString();
-      return (PRICES as Record<string, unknown>)[`${contract}.${method}`];
-    });
-    await user.click(screen.getByRole("button", { name: "Open dispute" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/The deposit changed to/);
-    expect(wallet.call).not.toHaveBeenCalled();
   });
 
   it("rounds amounts shown after a payout and keeps exact ones exact", () => {
@@ -203,42 +150,11 @@ describe("NEAR deposit", () => {
     await expect(createNearRpc("https://rpc.test", broken as unknown as typeof fetch).accountExists("bob.testnet")).rejects.toThrow(/boom/);
   });
 
-  it("says the deposit came back when the oracle refused the question", async () => {
-    const user = userEvent.setup();
-    renderNear(<DisputeForm arbitrum={null} />, { path: "/app/new", wallet: fakeNearWallet({ accountId: "alice.testnet" }), rpc: fakeNearRpc(PRICES, { ok: true, value: null }) });
-    await user.type(screen.getByLabelText("Question with the evidence"), "Was it delivered?");
-    await user.type(screen.getByLabelText("Counterparty account"), "bob.testnet");
-    await waitFor(() => expect(screen.getByRole("button", { name: "Open dispute" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Open dispute" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/sent the whole deposit back/);
-  });
-
-  it("connects the NEAR wallet first when no account is signed in", async () => {
-    const wallet = fakeNearWallet();
-    renderNear(<DisputeForm arbitrum={null} />, { path: "/app/new", wallet, rpc: fakeNearRpc(PRICES) });
-    await userEvent.click(screen.getByRole("button", { name: "Connect NEAR to open" }));
-    expect(wallet.connect).toHaveBeenCalled();
-    expect(wallet.call).not.toHaveBeenCalled();
-  });
-
-  it("validates NEAR accounts, the stake and the question", () => {
-    const config = { minStake: MIN_STAKE, timeoutSec: 3600 };
-    expect(validateNearDispute({ question: "q", counterparty: "Bob.testnet", stakeNear: "0.1" }, config, "alice.testnet")).toEqual({ ok: true, value: { question: "q", counterparty: "bob.testnet", stake: MIN_STAKE } });
-    const bad = validateNearDispute({ question: " ", counterparty: "0xabc!", stakeNear: "0.01" }, config, null);
-    expect(bad.ok ? null : Object.keys(bad.errors).sort()).toEqual(["counterparty", "question", "stake"]);
-    const self = validateNearDispute({ question: "q", counterparty: "alice.testnet", stakeNear: "1" }, config, "alice.testnet");
-    expect(self.ok ? null : self.errors.counterparty).toMatch(/someone other than you/);
-    expect(validateNearDispute({ question: "x".repeat(2001), counterparty: "bob.testnet", stakeNear: "1" }, config, null).ok).toBe(false);
-  });
-
-  it("turns contract panics and wallet errors into plain messages", () => {
+  it("turns wallet errors into plain messages", () => {
     expect(describeNearError(new Error("Smart contract panicked: stake too low: 1 yoctoNEAR, min 2"))).toMatch(/below the minimum/);
     expect(describeNearError(new Error("User closed the window"))).toMatch(/closed the wallet/);
     expect(describeNearError(new Error("Popup window blocked. Please allow popups for this site."))).toMatch(/blocked the wallet window/);
     expect(describeNearError("something else")).toMatch(/NEAR transaction failed/);
-    expect(requestIdFrom(4)).toBe(4);
-    expect(requestIdFrom(null)).toBeNull();
-    expect(requestIdFrom("4")).toBeNull();
   });
 });
 

@@ -39,23 +39,23 @@ function renderLanding(files: Record<string, unknown>) {
 }
 
 describe("Landing", () => {
-  it("states what Psephex does and sends people to the dashboard", () => {
+  it("leads with the judge for agent deals and sends people to open a case", () => {
     renderLanding(LIVE);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/An AI oracle that runs on NEAR/);
-    expect(screen.getByText(/Ask a yes-or-no question from NEAR and pay in NEAR/)).toHaveTextContent(/Base and Arbitrum get the same verdict through NEAR Chain Signatures/);
-    const cta = screen.getByRole("link", { name: "Try it on NEAR testnet" });
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("A judge for deals between AI agents, running on NEAR.");
+    expect(screen.getByText(/An agent that ordered work and an agent that delivered it both put their evidence on the record/)).toHaveTextContent(/either side can appeal to a human arbiter/);
+    const cta = screen.getByRole("link", { name: "Open a case on NEAR testnet" });
     expect(cta).toHaveAttribute("href", "/app/new");
   });
 
-  it("explains the five steps in order, NEAR first", () => {
+  it("explains a case in five steps, from the claim to the payout", () => {
     renderLanding(LIVE);
-    const steps = within(screen.getByRole("list", { name: "How a question is answered" })).getAllByRole("listitem");
+    const steps = within(screen.getByRole("list", { name: "How a case is decided" })).getAllByRole("listitem");
     expect(steps.map((s) => s.querySelector("h3")?.textContent)).toEqual([
-      "You ask on NEAR and pay in NEAR",
-      "Three models answer in TEEs",
+      "The buyer agent opens a case",
+      "The seller agent answers",
+      "Three models read both sides in TEEs",
       "NEAR checks two of three",
-      "The verdict lands in NEAR state",
-      "Base and Arbitrum get the same verdict",
+      "Either side can appeal, then NEAR pays",
     ]);
   });
 
@@ -65,6 +65,8 @@ describe("Landing", () => {
     expect(limits).toHaveTextContent(/9 is a prime number/);
     expect(within(limits).getByRole("link", { name: "dispute #2" })).toHaveAttribute("href", "/app/r/base/2");
     expect(limits).toHaveTextContent(/one on Phala/);
+    expect(limits).toHaveTextContent(/which is why the court has an appeal/);
+    expect(limits).toHaveTextContent(/The arbiter is one person today/);
     expect(screen.getByRole("region", { name: "What a verdict proves" })).toHaveTextContent(/80 of 80/);
   });
 
@@ -83,18 +85,22 @@ describe("Landing", () => {
   it("still reads when the API is down", async () => {
     renderLanding({});
     expect(await screen.findByText(/Live numbers are unavailable right now/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Try it on NEAR testnet" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open a case on NEAR testnet" })).toBeInTheDocument();
   });
 
-  it("shows the NEAR call before the Solidity client and links the deployed contracts", () => {
+  it("shows how agents open and answer a case, then how a contract asks the oracle", () => {
     renderLanding(LIVE);
-    const dev = screen.getByRole("region", { name: "Use it from your contract" });
+    const dev = screen.getByRole("region", { name: "Use it from your agent or contract" });
     const text = dev.textContent ?? "";
+    expect(text).toContain("psephex-court.testnet open_case json-args");
+    expect(text).toContain('"oracle_reserve":"<ask_deposit>"');
+    expect(text).toContain("psephex-court.testnet respond json-args");
+    expect(text.indexOf("open_case json-args")).toBeLessThan(text.indexOf("pub fn on_answer"));
     expect(text).toContain("pub fn on_answer(&mut self, request_id: u64, answer: String)");
     expect(text).toContain("oracle.psephex.testnet ask json-args");
     expect(text).toContain("contract YesNoClient is IAiOracleClient");
     expect(text.indexOf("on_answer")).toBeLessThan(text.indexOf("function onAnswer(uint256 id, uint8 answer) external"));
-    for (const name of ["AiOracle on Basescan", "Dispute on Basescan", "oracle.psephex.testnet on Nearblocks", "dispute.psephex.testnet on Nearblocks", "Oracle address on Basescan"]) {
+    for (const name of ["psephex-court.testnet on Nearblocks", "AiOracle on Basescan", "Dispute on Basescan", "oracle.psephex.testnet on Nearblocks", "dispute.psephex.testnet on Nearblocks", "Oracle address on Basescan"]) {
       expect(screen.getByRole("link", { name })).toHaveAttribute("rel", "noopener noreferrer");
     }
   });

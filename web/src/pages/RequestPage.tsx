@@ -7,14 +7,15 @@ import { ChainBadge } from "../components/ChainBadge.js";
 import { Commands } from "../components/Commands.js";
 import { Steps } from "../components/Steps.js";
 import { Badge } from "../components/ui/badge.js";
-import { explorer, NEAR_DISPUTE_CONTRACT } from "../deployment.js";
+import { explorer, NEAR_COURT_CONTRACT, NEAR_DISPUTE_CONTRACT } from "../deployment.js";
 import { evmChain, type EvmChainConfig } from "../evm-chains.js";
 import { useCase, useChainQuestionHash, useSettlementWinner } from "../chain-hooks.js";
 import { usePageTitle, useRequestDetail, useVerifyPlan } from "../hooks.js";
 import { displayText } from "../lib/dispute.js";
 import { statusLabel } from "../lib/status.js";
 import { ballots, canRefund, deriveProgress, questionMatchesChain, type CaseInfo, type StepKey } from "../lib/steps.js";
-import { useNearCase, useNearQuestionHash } from "../near/hooks.js";
+import { useCaseByRequest } from "../near/court-hooks.js";
+import { useNearAsker, useNearCase, useNearQuestionHash } from "../near/hooks.js";
 import { EXPLORER_NAME, isSource, SOURCE_NAME, SOURCE_SHORT, type EvmSource, type Source } from "../sources.js";
 import { outcomeText } from "./outcome.js";
 import { EvmRefundButton, NearRefundButton } from "./RefundButtons.js";
@@ -71,6 +72,7 @@ interface ChainState {
   readonly winner: string | null;
   readonly settledLink: string | null;
   readonly refund: ReactNode;
+  readonly courtCase?: number | null;
 }
 
 function RequestView({ source, id, detail, apiError, chain, now }: { source: Source; id: number; detail: RequestDetail | null; apiError: boolean; chain: ChainState; now: bigint }) {
@@ -98,6 +100,15 @@ function RequestView({ source, id, detail, apiError, chain, now }: { source: Sou
           {detail && <Badge variant="outline">{statusLabel(detail.status, source)}</Badge>}
         </div>
         <h1 className="m-0 max-w-[34ch] font-display text-2xl leading-tight font-bold break-words sm:text-3xl">{title}</h1>
+        {chain.courtCase && (
+          <p className="m-0 text-sm">
+            The court asked this question for{" "}
+            <Link to={`/app/case/${chain.courtCase}`} className="underline underline-offset-2 hover:text-bronze-text">
+              case #{chain.courtCase}
+            </Link>
+            .
+          </p>
+        )}
         {notFound && <p className="m-0 text-muted">If you just opened it, wait a few seconds for {SOURCE_NAME[source]} to include the transaction.</p>}
         {matches === true && <p className="m-0 text-sm text-muted">This text matches the question hash stored on {chainName}.</p>}
         {matches === false && (
@@ -177,6 +188,8 @@ function NearRequest({ id, now }: { id: number; now: bigint }) {
   const nearCase = useNearCase(id, true);
   const detail = useRequestDetail("near", id, true);
   const chainHash = useNearQuestionHash(id, true);
+  const fromCourt = useNearAsker(id, true) === NEAR_COURT_CONTRACT;
+  const courtCase = useCaseByRequest(id, fromCourt);
   const chain: ChainState = {
     caseInfo: nearCase.data,
     caseLoading: nearCase.isLoading,
@@ -185,6 +198,7 @@ function NearRequest({ id, now }: { id: number; now: bigint }) {
     winner: nearCase.winner,
     settledLink: explorer.address("near", NEAR_DISPUTE_CONTRACT),
     refund: <NearRefundButton id={id} onDone={() => void nearCase.refetch()} />,
+    courtCase: fromCourt ? (courtCase.data ?? null) : null,
   };
   return <RequestView source="near" id={id} detail={detail.data ?? null} apiError={detail.isError} chain={chain} now={now} />;
 }
