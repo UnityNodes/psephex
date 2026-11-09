@@ -1,4 +1,5 @@
 import { CircleX } from "lucide-react";
+import { m } from "motion/react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import type { Answer, RequestStatus, RequestSummary } from "../api.js";
@@ -9,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs.js";
 import { useRequestPages } from "../hooks.js";
 import { displayText } from "../lib/text.js";
 import { timeAgo, tookSeconds } from "../lib/format.js";
+import { useEnter } from "../lib/motion.js";
 
 export const STATUS_LABEL: Readonly<Record<RequestStatus, string>> = {
   seen: "Seen by the relayer",
@@ -30,7 +32,7 @@ const FILTERS: readonly { value: RequestStatus | "all"; label: string }[] = [
 ];
 
 const VERDICT_TEXT: Readonly<Record<Answer, string>> = { YES: "text-yes", NO: "text-no", UNKNOWN: "text-unknown" };
-const COLUMNS = "md:grid md:grid-cols-[3.5rem_minmax(0,1fr)_8rem_10rem_4rem_6.5rem] md:items-center md:gap-4";
+const COLUMNS = "xl:grid xl:grid-cols-[3.5rem_minmax(0,1fr)_8rem_10rem_4rem_6.5rem] xl:items-center xl:gap-4";
 
 function Verdict({ r }: { r: RequestSummary }) {
   if (r.status === "failed" || r.status === "rejected") {
@@ -49,26 +51,30 @@ function Verdict({ r }: { r: RequestSummary }) {
   );
 }
 
-export function RequestRow({ r, selected = false }: { r: RequestSummary; selected?: boolean }) {
+const ROW_STAGGER = 0.03;
+const MAX_STAGGERED_ROWS = 12;
+
+export function RequestRow({ r, selected = false, index = 0 }: { r: RequestSummary; selected?: boolean; index?: number }) {
   const took = tookSeconds(r);
+  const enter = useEnter({ opacity: 0, y: 8 }, Math.min(index, MAX_STAGGERED_ROWS) * ROW_STAGGER);
   return (
-    <li>
+    <m.li {...enter}>
       <Link
         to={`/app/r/${r.id}`}
         aria-current={selected ? "page" : undefined}
-        className={`flex flex-col gap-2 border-b border-line px-4 py-4 transition-colors duration-150 hover:bg-raised/70 md:py-3 ${COLUMNS} ${selected ? "bg-raised shadow-[inset_2px_0_0_var(--bronze)]" : ""}`}
+        className={`flex flex-col gap-2 border-b border-line px-4 py-4 transition-colors duration-150 hover:bg-raised/70 xl:py-3 ${COLUMNS} ${selected ? "bg-raised shadow-[inset_2px_0_0_var(--bronze)]" : ""}`}
       >
-        <span className="text-sm text-ink md:contents">
-          <span className="font-mono text-xs text-muted md:text-sm">#{r.id}</span> <span className="line-clamp-2 md:line-clamp-1">{displayText(r.question)}</span>
+        <span className="text-sm text-ink xl:contents">
+          <span className="font-mono text-xs text-muted xl:text-sm">#{r.id}</span> <span className="line-clamp-2 xl:line-clamp-1">{displayText(r.question)}</span>
         </span>
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1 md:contents">
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1 xl:contents">
           <Verdict r={r} />
-          <span className="text-xs text-muted md:text-sm">{STATUS_LABEL[r.status]}</span>
-          <span className="text-xs text-muted tabular-nums md:text-sm">{took !== null ? `${took} s` : "…"}</span>
-          <span className="text-xs text-muted md:text-sm">{timeAgo(r.createdAt)}</span>
+          <span className="text-xs text-muted xl:text-sm">{STATUS_LABEL[r.status]}</span>
+          <span className="text-xs text-muted tabular-nums xl:text-sm">{took !== null ? `${took} s` : "…"}</span>
+          <span className="text-xs text-muted xl:text-sm">{timeAgo(r.createdAt)}</span>
         </span>
       </Link>
-    </li>
+    </m.li>
   );
 }
 
@@ -96,10 +102,10 @@ export function RecentDisputes() {
         <h2 id="recent-heading" className="m-0 font-display text-xl font-bold">
           Recent disputes
         </h2>
-        <Tabs value={status} onValueChange={(v) => setStatus(v as RequestStatus | "all")}>
-          <TabsList aria-label="Show" className="h-auto bg-stone">
+        <Tabs value={status} onValueChange={(v) => setStatus(v as RequestStatus | "all")} className="w-full sm:w-auto">
+          <TabsList aria-label="Show" className="grid h-auto w-full grid-cols-4 bg-stone sm:inline-flex sm:w-auto">
             {FILTERS.map((f) => (
-              <TabsTrigger key={f.value} value={f.value} className="min-h-9 px-3 data-[state=active]:bg-raised data-[state=active]:text-ink">
+              <TabsTrigger key={f.value} value={f.value} className="min-h-9 px-1.5 text-xs data-[state=active]:bg-raised data-[state=active]:text-ink sm:px-3 sm:text-sm">
                 {f.label}
               </TabsTrigger>
             ))}
@@ -118,8 +124,8 @@ export function RecentDisputes() {
       {pages.isPending && <LoadingRows />}
       {pages.isSuccess && items.length === 0 && <p className="m-0 px-4 py-6 text-sm text-muted">No disputes here yet. Open the first one.</p>}
       <ul className="m-0 list-none p-0">
-        {items.map((r) => (
-          <RequestRow key={r.id} r={r} selected={r.id === selected} />
+        {items.map((r, i) => (
+          <RequestRow key={`${status}-${r.id}`} r={r} selected={r.id === selected} index={i} />
         ))}
       </ul>
       {pages.hasNextPage && (

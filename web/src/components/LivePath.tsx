@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { Answer, RequestDetail } from "../api.js";
 import { explorer, ORACLE_EVM_ADDRESS } from "../deployment.js";
-import { ballots, type Ballot } from "../lib/ballots.js";
+import { ballots, modelLabel, type Ballot } from "../lib/ballots.js";
 import { displayText } from "../lib/text.js";
 import { BallotDisc } from "./Ballots.js";
 import { BorderBeam } from "./ui/border-beam.js";
@@ -12,10 +12,6 @@ import { BorderBeam } from "./ui/border-beam.js";
 const EASE = [0.22, 1, 0.36, 1] as const;
 const STEP_DELAY = 0.28;
 const VERDICT_TEXT: Readonly<Record<Answer, string>> = { YES: "text-yes", NO: "text-no", UNKNOWN: "text-unknown" };
-
-function short(model: string): string {
-  return model.split("/").at(-1) ?? model;
-}
 
 function TxLink({ href, children }: { href: string | null; children: ReactNode }) {
   if (!href) return null;
@@ -34,7 +30,7 @@ function Node({ index, icon, where, title, children }: { index: number; icon: Re
       initial={still ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: EASE, delay: 0.15 + index * STEP_DELAY }}
-      className="relative flex min-w-0 flex-col gap-3 pl-12 lg:pt-14 lg:pl-0"
+      className="relative flex min-w-0 flex-col gap-3 pl-12 xl:pt-14 xl:pl-0"
     >
       <span className="absolute top-0 left-0 z-10 flex size-9 items-center justify-center rounded-full border border-bronze bg-stone text-bronze-text">{icon}</span>
       <div className="flex flex-col gap-0.5">
@@ -51,8 +47,8 @@ function Track() {
   const grow = { duration: 1.4, ease: EASE, delay: 0.15 };
   return (
     <>
-      <m.span aria-hidden="true" initial={still ? false : { scaleY: 0 }} animate={{ scaleY: 1 }} transition={grow} className="absolute top-4 bottom-4 left-[17px] w-px origin-top bg-gradient-to-b from-bronze via-bronze/60 to-bronze lg:hidden" />
-      <m.span aria-hidden="true" initial={still ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={grow} className="absolute top-[17px] right-4 left-4 hidden h-px origin-left bg-gradient-to-r from-bronze via-bronze/60 to-bronze lg:block" />
+      <m.span aria-hidden="true" initial={still ? false : { scaleY: 0 }} animate={{ scaleY: 1 }} transition={grow} className="absolute top-4 bottom-4 left-[17px] w-px origin-top bg-gradient-to-b from-bronze via-bronze/60 to-bronze xl:hidden" />
+      <m.span aria-hidden="true" initial={still ? false : { scaleX: 0 }} animate={{ scaleX: 1 }} transition={grow} className="absolute top-[17px] right-4 left-4 hidden h-px origin-left bg-gradient-to-r from-bronze via-bronze/60 to-bronze xl:block" />
     </>
   );
 }
@@ -61,17 +57,18 @@ function Votes({ list }: { list: readonly Ballot[] }) {
   const still = useReducedMotion() === true;
   const slots: readonly (Ballot | null)[] = list.length > 0 ? list : [null, null, null];
   return (
-    <ul className="m-0 flex list-none gap-3 p-0">
+    <ul className="m-0 grid list-none grid-cols-3 gap-2 p-0">
       {slots.map((b, i) => (
         <m.li
           key={b?.model ?? i}
           initial={still ? false : { opacity: 0, y: -14, rotate: -8 }}
           animate={{ opacity: 1, y: 0, rotate: 0 }}
           transition={{ type: "spring", stiffness: 380, damping: 22, delay: 0.15 + STEP_DELAY + 0.25 + i * 0.14 }}
-          className="flex w-16 flex-col items-center gap-1 text-center"
+          className="flex min-w-0 flex-col items-center gap-1 text-center"
+          title={b?.model}
         >
           <BallotDisc vote={b?.vote ?? null} size={40} drop={false} />
-          <span className="w-full truncate text-[11px] text-ink">{b ? short(b.model) : "Waiting"}</span>
+          <span className="text-[11px] leading-tight text-ink">{b ? modelLabel(b.model) : "Waiting"}</span>
           <span className="text-[11px]">{b?.vote ?? "no vote"}</span>
         </m.li>
       ))}
@@ -108,7 +105,7 @@ export function LivePath({ detail }: { detail: RequestDetail | null }) {
           </Link>
         )}
       </div>
-      <ol key={detail?.id ?? "empty"} className="relative m-0 grid list-none gap-8 p-0 lg:grid-cols-5 lg:gap-6">
+      <ol key={detail?.id ?? "empty"} className="relative m-0 grid list-none gap-8 p-0 xl:grid-cols-5 xl:gap-6">
         <Track />
         <Node index={0} icon={<Box className="size-4" aria-hidden="true" />} where="Base Sepolia" title="Question asked">
           <p className="m-0 line-clamp-4 text-ink break-words">{detail ? displayText(detail.question) : "Waiting for the first answered dispute."}</p>
@@ -120,7 +117,7 @@ export function LivePath({ detail }: { detail: RequestDetail | null }) {
         <Node index={2} icon={<ShieldCheck className="size-4" aria-hidden="true" />} where="NEAR contract" title="Two of three agree">
           {verdict ? (
             <>
-              <p className={`m-0 font-display text-4xl leading-none font-extrabold ${VERDICT_TEXT[verdict]}`}>{verdict}</p>
+              <p className={`m-0 font-display text-4xl leading-none font-extrabold xl:text-3xl 2xl:text-4xl ${VERDICT_TEXT[verdict]}`}>{verdict}</p>
               <p className="m-0">
                 {agree} of {list.length} signed answers say <strong className={VERDICT_TEXT[verdict]}>{verdict}</strong>; two are enough.
               </p>

@@ -87,3 +87,13 @@ describe("format", () => {
     expect(timeAgo("nope", now)).toBe("");
   });
 });
+
+describe("modelLabel", () => {
+  it("keeps the family and version of long provider ids", async () => {
+    const { modelLabel } = await import("../src/lib/ballots.js");
+    expect(modelLabel("Qwen/Qwen3.6-35B-A3B-FP8")).toBe("Qwen3.6");
+    expect(modelLabel("deepseek-ai/DeepSeek-V4.1-Flash-1017")).toBe("DeepSeek V4.1");
+    expect(modelLabel("google/gemma-4-26b-a4b-uncensored")).toBe("Gemma 4");
+    expect(modelLabel("plain")).toBe("Plain");
+  });
+});

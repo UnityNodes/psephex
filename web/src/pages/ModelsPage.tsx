@@ -1,5 +1,7 @@
 import { Cpu, KeyRound, ShieldCheck } from "lucide-react";
+import { m } from "motion/react";
 import { useState } from "react";
+import { useEnter } from "../lib/motion.js";
 import type { ModelView } from "../api.js";
 import { CopyButton } from "../components/Commands.js";
 import { Badge } from "../components/ui/badge.js";
@@ -13,26 +15,27 @@ function randomNonce(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export function ModelEntry({ m }: { m: ModelView }) {
+export function ModelEntry({ m: model, index = 0 }: { m: ModelView; index?: number }) {
+  const enter = useEnter({ opacity: 0, y: 14 }, index * 0.08, 0.4);
   const [nonce, setNonce] = useState<string | null>(null);
-  const attestation = m.attestation;
+  const attestation = model.attestation;
   const link = attestation ? attestationUrl(attestation.url) : null;
-  const vendor = m.model.includes("/") ? m.model.split("/")[0] : null;
+  const vendor = model.model.includes("/") ? model.model.split("/")[0] : null;
   return (
-    <li className="flex min-w-0 flex-col gap-5 rounded-2xl border border-line bg-paper p-5">
+    <m.li {...enter} className="flex min-w-0 flex-col gap-5 rounded-2xl border border-line bg-paper p-5">
       <div className="flex items-start justify-between gap-3">
         <span className="flex size-10 items-center justify-center rounded-xl bg-raised text-bronze-text">
           <Cpu className="size-5" aria-hidden="true" />
         </span>
         <Badge variant="outline" className="border-line text-muted">
-          {PROVIDER[m.provider] ?? m.provider}
+          {PROVIDER[model.provider] ?? model.provider}
         </Badge>
       </div>
       <div className="flex flex-col gap-1">
         {vendor && <p className="m-0 text-xs text-muted">{vendor}</p>}
-        <h2 className="m-0 font-display text-xl leading-tight font-bold break-words">{m.model}</h2>
+        <h2 className="m-0 font-display text-xl leading-tight font-bold break-words">{model.model}</h2>
         <p className="m-0 text-sm text-muted">
-          Signature scheme <code className="font-mono text-xs text-ink">{m.scheme}</code>
+          Signature scheme <code className="font-mono text-xs text-ink">{model.scheme}</code>
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -41,8 +44,8 @@ export function ModelEntry({ m }: { m: ModelView }) {
           Public key registered on NEAR
         </p>
         <div className="flex items-start gap-2 rounded-lg border border-vault-line bg-vault p-2 text-vault-ink">
-          <code className="min-w-0 flex-1 font-mono text-[11px] leading-relaxed break-all">{m.publicKey}</code>
-          <CopyButton text={m.publicKey} />
+          <code className="min-w-0 flex-1 font-mono text-[11px] leading-relaxed break-all">{model.publicKey}</code>
+          <CopyButton text={model.publicKey} />
         </div>
       </div>
       <div className="mt-auto flex flex-col gap-2 text-sm">
@@ -66,7 +69,7 @@ export function ModelEntry({ m }: { m: ModelView }) {
           </>
         )}
       </div>
-    </li>
+    </m.li>
   );
 }
 
@@ -83,8 +86,8 @@ export function ModelsPage() {
       </header>
       {models.isError && <p className="text-no">The Psephex API did not answer. Reload the page in a moment.</p>}
       <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-3">
-        {models.data?.map((m) => (
-          <ModelEntry key={m.model} m={m} />
+        {models.data?.map((model, i) => (
+          <ModelEntry key={model.model} m={model} index={i} />
         ))}
       </ul>
     </article>

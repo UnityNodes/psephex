@@ -1,4 +1,5 @@
 import { Check, Copy } from "lucide-react";
+import { m, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import type { VerifyPlan } from "../api.js";
 
@@ -16,6 +17,7 @@ export function isSafeCommand(command: string): boolean {
 
 export function CopyButton({ text }: { text: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const still = useReducedMotion() === true;
   return (
     <button
       type="button"
@@ -32,7 +34,9 @@ export function CopyButton({ text }: { text: string }) {
         );
       }}
     >
-      {state === "copied" ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+      <m.span key={state} className="flex" initial={still ? false : { scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 500, damping: 22 }}>
+        {state === "copied" ? <Check className="size-3.5 text-yes" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+      </m.span>
       {state === "copied" ? "Copied" : state === "failed" ? "Copy failed" : "Copy"}
     </button>
   );

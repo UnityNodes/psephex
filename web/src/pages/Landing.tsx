@@ -1,6 +1,6 @@
 import { m, useReducedMotion } from "motion/react";
 import { Box, Check, Coins, Cpu, ShieldCheck, Signature, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router";
 import clientSource from "../../../contracts/base/src/examples/YesNoClient.sol?raw";
 import type { Stats } from "../api.js";
@@ -221,6 +221,28 @@ function ForDevelopers() {
   );
 }
 
+function HeroTitle({ text }: { text: string }) {
+  const still = useReducedMotion() === true;
+  const words = text.split(" ");
+  return (
+    <h1 className="m-0 font-display text-[2.7rem] leading-[0.95] font-extrabold sm:text-6xl lg:text-7xl">
+      {words.map((w, i) => (
+        <Fragment key={i}>
+          <m.span
+            className="inline-block"
+            initial={still ? false : { opacity: 0, y: "0.35em" }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay: 0.04 * i }}
+          >
+            {w}
+          </m.span>
+          {i < words.length - 1 && " "}
+        </Fragment>
+      ))}
+    </h1>
+  );
+}
+
 function HeroPath() {
   const { detail } = useLatestVerdict();
   return <LivePath detail={detail} />;
@@ -254,7 +276,7 @@ export function Landing() {
         <main className="flex flex-col gap-24 pt-10 pb-24 sm:pt-14">
           <div className="flex flex-col gap-10">
             <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-16">
-              <h1 className="m-0 font-display text-[2.7rem] leading-[0.95] font-extrabold sm:text-6xl lg:text-7xl">Three AI models answer, NEAR checks that two agree, Base gets the verdict.</h1>
+              <HeroTitle text="Three AI models answer, NEAR checks that two agree, Base gets the verdict." />
               <div className="flex flex-col gap-6">
                 <p className="m-0 max-w-[52ch] text-base text-muted sm:text-lg">
                   Psephex is a yes-or-no oracle for Base. Every answer is signed inside a TEE, a NEAR contract enforces two of three, and NEAR Chain Signatures write the result back to Base. No bridge, no oracle key on a server.

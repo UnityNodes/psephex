@@ -8,3 +8,12 @@ describe("NumberTicker with reduced motion", () => {
     expect(screen.getByTestId("n")).toHaveTextContent("13");
   });
 });
+
+describe("useEnter with reduced motion", () => {
+  it("does not animate at all", async () => {
+    const { renderHook } = await import("@testing-library/react");
+    const { useEnter } = await import("../src/lib/motion.js");
+    const { result } = renderHook(() => useEnter({ opacity: 0, y: 8 }));
+    expect(result.current).toEqual({});
+  });
+});
