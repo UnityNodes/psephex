@@ -75,7 +75,13 @@ describe("NearScanner", () => {
     await expect(scanner().poll()).rejects.toThrow(/near:mainnet/);
     expect(repo.getRequest(1)).toBeUndefined();
     near.requests.clear();
-    near.nearRequests = async () => [nearRequest(2), nearRequest(1)];
-    await expect(scanner().poll()).rejects.toThrow(/after 2/);
+    near.nearRequests = async () => [nearRequest(1), nearRequest(1)];
+    await expect(scanner().poll()).rejects.toThrow(/after 1/);
+  });
+
+  it("stops when a page skips ids instead of jumping the cursor", async () => {
+    near.nearRequests = async () => [nearRequest(2)];
+    await expect(scanner().poll()).rejects.toThrow(/started at id 2, relayer expects 1/);
+    expect(repo.getRequest(2)).toBeUndefined();
   });
 });

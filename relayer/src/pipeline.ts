@@ -209,7 +209,7 @@ export class Processor {
 
   async #alreadyDone(req: RequestRow): Promise<StepResult | null> {
     const { target, near, settings } = this.#d;
-    if (target.kind === "near") return (await near.isFulfilled(req.id)) ? this.#end(req, "rejected", alreadyFulfilledOn(settings.chainLabel)) : null;
+    if (target.kind === "near") return (await near.isFulfilled(req.id)) ? this.#adoptNearVerdict(req, alreadyFulfilledOn(settings.chainLabel)) : null;
     if (await target.base.isFulfilledOnBase(BigInt(req.id))) return this.#end(req, "rejected", alreadyFulfilledOn(settings.chainLabel));
     if (await near.isFulfilled(req.id)) return this.#end(req, "failed", "fulfilled in NEAR without a local record");
     return null;
@@ -428,7 +428,7 @@ export class Processor {
   }
 
   #onSigned(req: RequestRow, txHash: string, result: OnSignedResult): StepResult {
-    if (result.chain !== undefined && result.chain !== this.#d.settings.chain) {
+    if (result.chain !== this.#d.settings.chain) {
       this.#d.repo.markNearResult(txHash, false, null, JSON.stringify(result));
       return this.#end(req, "failed", `NEAR signed for chain ${result.chain}, relayer serves ${this.#d.settings.chain}`);
     }

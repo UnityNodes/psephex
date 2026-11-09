@@ -77,7 +77,7 @@ export type SendBehavior = "ok" | "mpc_fail" | "panic" | "panic_cap" | "panic_pr
 
 export class FakeNear implements NearOraclePort, NearRequestsPort {
   chainId = CHAIN_ID;
-  signedChain: string | undefined;
+  signedChain: string | undefined = `eip155:${CHAIN_ID}`;
   requests = new Map<number, NearRequestInfo>();
   nearSignCalls: NearFulfillArgs[] = [];
   pageCalls: [number, number][] = [];
@@ -183,7 +183,7 @@ export class FakeNear implements NearOraclePort, NearRequestsPort {
     if (behavior === "panic_cap") return this.#store(hash, { kind: "failure", error: "Smart contract panicked: max_fee_per_gas above cap" });
     if (behavior === "panic_progress") return this.#store(hash, { kind: "failure", error: "Smart contract panicked: request signing in progress" });
     if (behavior === "invalid") return { kind: "invalid", error: "InvalidTxError: Expired" };
-    if (behavior === "mpc_fail") return this.#store(hash, { kind: "success", result: { ok: false, error: "sign failed" } });
+    if (behavior === "mpc_fail") return this.#store(hash, { kind: "success", result: { ok: false, error: "sign failed", ...(this.signedChain === undefined ? {} : { chain: this.signedChain }) } });
     const unsigned = serializeTransaction({
       type: "eip1559",
       chainId: this.chainId,

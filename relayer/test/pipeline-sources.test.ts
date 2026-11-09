@@ -1,6 +1,7 @@
 import { parseTransaction, type Hex } from "viem";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase, type Repository } from "../src/db.js";
+import type { NearRequestInfo } from "../src/types.js";
 import { Processor, type EvmSettings, type ProcessorSettings } from "../src/pipeline.js";
 import { byProvider } from "../src/providers.js";
 import { AIORACLE, ARBITRUM_CHAIN_ID, askedEvent, ASKER, FakeBase, FakeModels, FakeNear, ManualClock, NEAR_CHAIN, nearRequest, ORACLE_ADDRESS, silentLog } from "./fakes.js";
@@ -105,8 +106,9 @@ describe("Processor for the NEAR source", () => {
   it("records a request NEAR answered before the relayer saw it as already fulfilled", async () => {
     seed(1);
     near.fulfilled.add(1);
-    expect(await processor().run(1)).toEqual({ status: "rejected", waiting: false });
-    expect(repo.getRequest(1)?.reason).toBe("already fulfilled on NEAR");
+    near.requests.set(1, { ...(near.requests.get(1) as NearRequestInfo), answer: "NO", votes: [] });
+    expect(await processor().run(1)).toEqual({ status: "confirmed", waiting: false });
+    expect(repo.getRequest(1)?.answer).toBe("NO");
     expect(models.calls).toHaveLength(0);
   });
 
@@ -178,6 +180,7 @@ describe("Processor for the Arbitrum source", () => {
   });
 
   it("refuses a transaction whose chain id is not the configured one", async () => {
+    near.signedChain = chain;
     expect(await processor(84532).run(1)).toEqual({ status: "failed", waiting: false });
     expect(repo.getRequest(1)?.reason).toBe("tx chain 421614 is not 84532");
   });

@@ -44,6 +44,7 @@ export class NearScanner {
     const from = Number(this.scanned()) + 1;
     const page = await near.nearRequests(from, settings.pageSize);
     if (page.length === 0) return null;
+    if (page[0]?.requestId !== from) throw new Error(`near_requests started at id ${page[0]?.requestId}, relayer expects ${from}`);
     let previous = from - 1;
     for (const r of page) {
       if (r.chain !== settings.chain) throw new Error(`near_requests returned chain ${r.chain}, relayer expects ${settings.chain}`);

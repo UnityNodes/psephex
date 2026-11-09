@@ -148,9 +148,12 @@ describe("loadConfig", () => {
 
   it("loads an Arbitrum source from EVM_* names with its own chain key and database", () => {
     const { BASE_RPC_URL: _rpc, ...rest } = env;
-    const c = loadConfig({ ...rest, SOURCE: "arbitrum", EVM_RPC_URL: "https://sepolia-rollup.arbitrum.io/rpc" });
+    const c = loadConfig({ ...rest, SOURCE: "arbitrum", START_BLOCK: "1", EVM_RPC_URL: "https://sepolia-rollup.arbitrum.io/rpc" });
     expect(c).toMatchObject({ kind: "evm", source: "arbitrum", chain: "eip155:421614", evmChainId: 421614, evmRpcUrl: "https://sepolia-rollup.arbitrum.io/rpc", dbPath: "data/relayer-arbitrum.sqlite" });
-    expect(loadConfig({ ...env, SOURCE: "arbitrum" })).toMatchObject({ evmRpcUrl: "https://sepolia.base.org", chain: "eip155:421614" });
+    expect(() => loadConfig({ ...env, SOURCE: "arbitrum", START_BLOCK: "1" })).toThrow(/EVM_RPC_URL/);
+    expect(() => loadConfig({ ...env, SOURCE: "arbitrum", START_BLOCK: "1", BASE_CHAIN_ID: "84532", EVM_RPC_URL: "https://sepolia-rollup.arbitrum.io/rpc" })).not.toThrow();
+    expect(() => loadConfig({ ...env, SOURCE: "arbitrum", START_BLOCK: "1", EVM_CHAIN_ID: "84532", EVM_RPC_URL: "https://sepolia-rollup.arbitrum.io/rpc" })).toThrow(/runs on chain 421614, got 84532/);
+    expect(() => loadConfig({ ...env, SOURCE: "arbitrum", EVM_RPC_URL: "https://sepolia-rollup.arbitrum.io/rpc" })).toThrow(/START_BLOCK is required/);
     expect(loadConfig({ ...env, EVM_CHAIN_ID: "31337" })).toMatchObject({ chain: "eip155:31337" });
     expect(() => loadConfig(rest)).toThrow(/EVM_RPC_URL or BASE_RPC_URL is required/);
   });

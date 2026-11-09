@@ -157,15 +157,27 @@ function common(env: Env, source: SourceName, chain: string): CommonRelayerConfi
   };
 }
 
+/**
+ * A non-Base EVM process often shares the env file of the live Base relayer. Reading `BASE_*`
+ * there would quietly run it on Base's chain and RPC with an `arbitrum` cursor, so the Base
+ * names are honoured only for `SOURCE=base`, a non-Base chain id must match its source, and a fresh
+ * non-Base database must say where to start scanning instead of walking from genesis.
+ */
 function loadEvmConfig(env: Env, source: SourceName): EvmRelayerConfig {
-  const chainKey = ["EVM_CHAIN_ID", "BASE_CHAIN_ID"].find((k) => env[k]?.trim());
-  const fallbackChainId = SOURCES[source].defaultChainId;
-  if (!chainKey && fallbackChainId === undefined) throw new ConfigError(`EVM_CHAIN_ID is required for SOURCE=${source}`);
-  const evmChainId = chainKey ? positiveInt(env, chainKey, 1) : (fallbackChainId as number);
+  const isBase = source === "base";
+  const chainKeys = isBase ? ["EVM_CHAIN_ID", "BASE_CHAIN_ID"] : ["EVM_CHAIN_ID"];
+  const chainKey = chainKeys.find((k) => env[k]?.trim());
+  const expectedChainId = SOURCES[source].defaultChainId;
+  if (!chainKey && expectedChainId === undefined) throw new ConfigError(`EVM_CHAIN_ID is required for SOURCE=${source}`);
+  const evmChainId = chainKey ? positiveInt(env, chainKey, 1) : (expectedChainId as number);
+  if (!isBase && expectedChainId !== undefined && evmChainId !== expectedChainId) {
+    throw new ConfigError(`SOURCE=${source} runs on chain ${expectedChainId}, got ${evmChainId}`);
+  }
+  if (!isBase && !env.START_BLOCK?.trim()) throw new ConfigError(`START_BLOCK is required for SOURCE=${source}`);
   return {
     ...common(env, source, evmChainKey(evmChainId)),
     kind: "evm",
-    evmRpcUrl: serviceUrl(env, firstSet(env, ["EVM_RPC_URL", "BASE_RPC_URL"])),
+    evmRpcUrl: serviceUrl(env, isBase ? firstSet(env, ["EVM_RPC_URL", "BASE_RPC_URL"]) : "EVM_RPC_URL"),
     aiOracleAddress: address(env, "AIORACLE_ADDRESS"),
     oracleEvmAddress: address(env, "ORACLE_EVM_ADDRESS"),
     evmChainId,
