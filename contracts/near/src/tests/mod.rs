@@ -15,6 +15,7 @@ fn base() -> String {
 }
 const SELECTOR_FROM_CAST_SIG: [u8; 4] = [0x3b, 0x3b, 0x45, 0x8b];
 const FEE_CAP: U128 = U128(2_000_000_000);
+const DELAY: u64 = 86_400;
 
 fn test_key() -> SigningKey {
     let mut secret = [0u8; 32];
@@ -41,6 +42,7 @@ fn setup() -> AiOracle {
         BASE_ORACLE.to_string(),
         FEE_CAP,
         NEAR_FEE,
+        DELAY,
     );
     let pk = test_key().verifying_key();
     c.set_model_key(
@@ -620,6 +622,7 @@ fn review_model_id_with_colon_and_leading_whitespace_signature() {
         BASE_ORACLE.to_string(),
         FEE_CAP,
         NEAR_FEE,
+        DELAY,
     );
     let model = "org/model:tag";
     c.set_model_key(
@@ -1083,7 +1086,9 @@ fn config_has_models_count_and_no_fulfilled_list() {
             "models",
             "near_chain",
             "near_fee",
+            "open_proposals",
             "owner",
+            "owner_delay_seconds",
             "path",
             "signer"
         ]
@@ -1109,70 +1114,6 @@ fn config_has_models_count_and_no_fulfilled_list() {
     assert!(c.is_fulfilled(base(), 21));
 }
 
-fn v2_state() -> migrate::AiOracleV2 {
-    let mut model_keys = IterableMap::new(b"m");
-    model_keys.insert(
-        MODEL.to_string(),
-        ModelKey {
-            provider: PROVIDER.to_string(),
-            scheme: SCHEME.to_string(),
-            public_key: test_key().verifying_key().as_bytes().to_vec(),
-        },
-    );
-    let mut fulfilled = IterableSet::new(b"f");
-    fulfilled.insert(1u64);
-    fulfilled.insert(2u64);
-    let mut relayers = IterableSet::new(b"r");
-    relayers.insert("relayer.testnet".parse::<AccountId>().unwrap());
-    let mut v2 = migrate::AiOracleV2 {
-        owner: "owner.testnet".parse().unwrap(),
-        signer: "v1.signer-prod.testnet".parse().unwrap(),
-        path: "base-1".to_string(),
-        base_chain_id: CHAIN_ID,
-        base_oracle_address: "1111111111111111111111111111111111111111".to_string(),
-        model_keys,
-        fulfilled,
-        relayers,
-        pending: IterableSet::new(b"p"),
-        max_fee_per_gas_cap: FEE_CAP.0,
-    };
-    v2.model_keys.flush();
-    v2.fulfilled.flush();
-    v2.relayers.flush();
-    v2.pending.flush();
-    v2
-}
-
-#[test]
-fn v2_layout_matches_the_deployed_contract() {
-    owner_ctx();
-    let bytes = near_sdk::borsh::to_vec(&v2_state()).unwrap();
-    let mut expected = Vec::new();
-    let push_bytes = |out: &mut Vec<u8>, b: &[u8]| {
-        out.extend_from_slice(&(b.len() as u32).to_le_bytes());
-        out.extend_from_slice(b);
-    };
-    push_bytes(&mut expected, b"owner.testnet");
-    push_bytes(&mut expected, b"v1.signer-prod.testnet");
-    push_bytes(&mut expected, b"base-1");
-    expected.extend_from_slice(&CHAIN_ID.to_le_bytes());
-    push_bytes(&mut expected, b"1111111111111111111111111111111111111111");
-    expected.extend_from_slice(&1u32.to_le_bytes());
-    push_bytes(&mut expected, b"mv");
-    push_bytes(&mut expected, b"mm");
-    expected.extend_from_slice(&2u32.to_le_bytes());
-    push_bytes(&mut expected, b"fv");
-    push_bytes(&mut expected, b"fm");
-    expected.extend_from_slice(&1u32.to_le_bytes());
-    push_bytes(&mut expected, b"rv");
-    push_bytes(&mut expected, b"rm");
-    expected.extend_from_slice(&0u32.to_le_bytes());
-    push_bytes(&mut expected, b"pv");
-    push_bytes(&mut expected, b"pm");
-    expected.extend_from_slice(&FEE_CAP.0.to_le_bytes());
-    assert_eq!(bytes, expected);
-}
-
 fn self_ctx() {
     testing_env!(VMContextBuilder::new()
         .current_account_id("oracle.psephex.testnet".parse().unwrap())
@@ -1180,49 +1121,101 @@ fn self_ctx() {
         .build());
 }
 
+fn v3_state() -> migrate::AiOracleV3 {
+    let old = setup();
+    let mut fulfilled = IterableSet::new(b"F");
+    fulfilled.insert((CHAIN_ID, 1u64));
+    fulfilled.insert((CHAIN_ID, 2u64));
+    let mut relayers = IterableSet::new(b"r");
+    relayers.insert("relayer.testnet".parse::<AccountId>().unwrap());
+    let mut chains = IterableMap::new(b"c");
+    chains.insert(
+        CHAIN_ID,
+        EvmChain {
+            name: "Base Sepolia".to_string(),
+            oracle_address: "1111111111111111111111111111111111111111".to_string(),
+        },
+    );
+    let mut model_keys = IterableMap::new(b"m");
+    model_keys.insert(
+        MODEL.to_string(),
+        old.model_keys.get(MODEL).unwrap().clone(),
+    );
+    let mut v3 = migrate::AiOracleV3 {
+        owner: "owner.testnet".parse().unwrap(),
+        signer: "v1.signer-prod.testnet".parse().unwrap(),
+        path: "base-1".to_string(),
+        chains,
+        model_keys,
+        fulfilled,
+        relayers,
+        pending: IterableSet::new(b"P"),
+        max_fee_per_gas_cap: FEE_CAP.0,
+        near_fee: NEAR_FEE.0,
+        near_requests: LookupMap::new(b"n"),
+        last_near_request_id: 6,
+    };
+    v3.chains.flush();
+    v3.model_keys.flush();
+    v3.fulfilled.flush();
+    v3.relayers.flush();
+    v3.pending.flush();
+    v3
+}
+
 #[test]
-fn migrate_keeps_base_history_models_and_relayers() {
+fn v3_layout_reads_the_live_oracle_state() {
+    use near_sdk::base64::Engine;
+    let raw = include_str!("fixtures/oracle-v3-state.b64").trim();
+    let bytes = near_sdk::base64::engine::general_purpose::STANDARD
+        .decode(raw)
+        .unwrap();
+    let live: migrate::AiOracleV3 = near_sdk::borsh::from_slice(&bytes).unwrap();
+    assert_eq!(live.owner.as_str(), "psephex.testnet");
+    assert_eq!(live.signer.as_str(), "v1.signer-prod.testnet");
+    assert_eq!(live.path, "base-1");
+    assert_eq!(live.near_fee, NEAR_FEE.0);
+    assert_eq!(live.last_near_request_id, 6);
+    assert_eq!(near_sdk::borsh::to_vec(&live).unwrap(), bytes);
+}
+
+#[test]
+fn migrate_keeps_requests_models_chains_and_relayers() {
     self_ctx();
-    env::state_write(&v2_state());
-    let c = AiOracle::migrate("Base Sepolia".to_string(), NEAR_FEE);
+    env::state_write(&v3_state());
+    let c = AiOracle::migrate(Some(86_400));
     assert!(c.is_fulfilled(base(), 1));
     assert!(c.is_fulfilled(base(), 2));
     assert!(!c.is_fulfilled(base(), 3));
-    assert!(!c.is_fulfilled("eip155:421614".to_string(), 1));
-    assert!(!c.is_fulfilled("near:testnet".to_string(), 1));
     assert_eq!(c.models().len(), 1);
     assert_eq!(c.models()[0].model, MODEL);
     assert_eq!(
         c.relayers(),
         vec!["relayer.testnet".parse::<AccountId>().unwrap()]
     );
-    let chains = c.chains();
-    assert_eq!(chains.len(), 1);
-    assert_eq!(chains[0].chain, BASE);
-    assert_eq!(chains[0].name, "Base Sepolia");
-    assert_eq!(chains[0].oracle_address, BASE_ORACLE);
+    assert_eq!(c.chains().len(), 1);
+    assert_eq!(c.chains()[0].oracle_address, BASE_ORACLE);
     assert_eq!(c.near_fee(), NEAR_FEE);
-    assert_eq!(c.last_near_request_id(), 0);
+    assert_eq!(c.last_near_request_id(), 6);
     assert_eq!(c.max_fee_per_gas_cap(), FEE_CAP);
+    assert_eq!(c.owner_delay_seconds().0, 86_400);
+    assert!(c.proposals().is_empty());
     assert_eq!(c.config()["owner"], "owner.testnet");
-    assert_eq!(c.config()["path"], "base-1");
-    assert_eq!(c.config()["near_chain"], "near:testnet");
-    let old_fulfilled: IterableSet<u64> = IterableSet::new(b"f");
-    assert!(old_fulfilled.is_empty() || !old_fulfilled.contains(&1));
-    let req = c.build_request(base(), 7, QUESTION.to_string(), MODEL.to_string());
-    assert!(req.contains("for the AiOracle contract 0x1111111111111111111111111111111111111111 on EVM chain 84532. Question: "));
+    assert_eq!(c.config()["owner_delay_seconds"], "86400");
+    assert_eq!(c.config()["open_proposals"], 0);
 }
 
 #[test]
 fn migrated_state_round_trips_through_borsh() {
     self_ctx();
-    env::state_write(&v2_state());
-    let mut c = AiOracle::migrate("Base Sepolia".to_string(), NEAR_FEE);
+    env::state_write(&v3_state());
+    let mut c = AiOracle::migrate(Some(86_400));
     c.chains.flush();
     c.fulfilled.flush();
     c.model_keys.flush();
     c.relayers.flush();
     c.pending.flush();
+    c.proposals.flush();
     let bytes = near_sdk::borsh::to_vec(&c).unwrap();
     let restored: AiOracle = near_sdk::borsh::from_slice(&bytes).unwrap();
     assert!(restored.is_fulfilled(base(), 1));
@@ -1233,11 +1226,75 @@ fn migrated_state_round_trips_through_borsh() {
 #[should_panic(expected = "pending signatures must finish before migration")]
 fn migrate_refuses_while_a_signature_is_pending() {
     self_ctx();
-    let mut v2 = v2_state();
-    v2.pending.insert(9);
-    v2.pending.flush();
-    env::state_write(&v2);
-    AiOracle::migrate("Base Sepolia".to_string(), NEAR_FEE);
+    let mut v3 = v3_state();
+    v3.pending.insert((CHAIN_ID, 9));
+    v3.pending.flush();
+    env::state_write(&v3);
+    AiOracle::migrate(Some(86_400));
+}
+
+#[test]
+#[should_panic(expected = "v3 state needs owner_delay_seconds")]
+fn migrate_from_v3_needs_a_delay() {
+    self_ctx();
+    env::state_write(&v3_state());
+    AiOracle::migrate(None);
+}
+
+fn current_state_written() -> AiOracle {
+    self_ctx();
+    env::state_write(&v3_state());
+    let mut c = AiOracle::migrate(Some(86_400));
+    c.chains.flush();
+    c.fulfilled.flush();
+    c.model_keys.flush();
+    c.relayers.flush();
+    c.pending.flush();
+    c.proposals.flush();
+    env::state_write(&c);
+    c
+}
+
+#[test]
+fn migrate_on_the_current_layout_keeps_everything() {
+    let before = current_state_written();
+    let after = AiOracle::migrate(None);
+    assert_eq!(after.config(), before.config());
+    assert!(after.is_fulfilled(base(), 2));
+    assert_eq!(after.owner_delay_seconds().0, 86_400);
+}
+
+#[test]
+fn migrate_on_the_current_layout_can_change_the_announced_delay() {
+    current_state_written();
+    let after = AiOracle::migrate(Some(7_200));
+    assert_eq!(after.owner_delay_seconds().0, 7_200);
+}
+
+#[test]
+#[should_panic(expected = "pending signatures must finish before migration")]
+fn migrate_on_the_current_layout_refuses_while_signing() {
+    let mut c = current_state_written();
+    c.pending.insert((CHAIN_ID, 5));
+    c.pending.flush();
+    env::state_write(&c);
+    AiOracle::migrate(None);
+}
+
+#[test]
+#[should_panic(expected = "unknown contract state layout")]
+fn migrate_refuses_a_state_it_cannot_read() {
+    self_ctx();
+    env::storage_write(b"STATE", b"not a contract state");
+    AiOracle::migrate(Some(86_400));
+}
+
+#[test]
+#[should_panic(expected = "owner delay must be between")]
+fn migrate_refuses_a_delay_below_the_minimum() {
+    self_ctx();
+    env::state_write(&v3_state());
+    AiOracle::migrate(Some(59));
 }
 
 const MODELS3: [&str; 3] = [
@@ -1261,6 +1318,7 @@ fn setup3() -> AiOracle {
         BASE_ORACLE.to_string(),
         FEE_CAP,
         NEAR_FEE,
+        DELAY,
     );
     for (i, m) in MODELS3.iter().enumerate() {
         c.set_model_key(
@@ -2172,6 +2230,7 @@ fn accepts_a_real_phala_gateway_answer_under_the_dstack_scheme() {
         "0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111".to_string(),
         FEE_CAP,
         NEAR_FEE,
+        DELAY,
     );
     c.set_model_key(
         s("model"),
@@ -2220,6 +2279,7 @@ fn the_two_schemes_are_not_interchangeable() {
         "0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111".to_string(),
         FEE_CAP,
         NEAR_FEE,
+        DELAY,
     );
     c.set_model_key(
         s("model"),
@@ -2278,6 +2338,7 @@ fn set_model_key_still_rejects_unknown_schemes() {
 }
 
 mod near;
+mod owner;
 
 #[test]
 #[should_panic(expected = "chain has signatures in progress")]

@@ -73,7 +73,7 @@ export async function startupChecks({ near, base, settings }: StartupDeps): Prom
   checkRelayerPermission(await near.relayerKeyPermission(), settings.nearOracleContract, FULFILL_EVM_METHOD);
   const config = await near.config();
   const entry = config.chains.find((c) => c.chain === settings.chain);
-  if (!entry) throw new Error(`NEAR contract has no chain ${settings.chain}; the owner adds it with set_chain`);
+  if (!entry) throw new Error(`NEAR contract has no chain ${settings.chain}; the owner announces it with propose and runs it after the delay`);
   const target = getAddress(`0x${entry.oracleAddress.replace(/^0x/, "")}`);
   if (target !== getAddress(settings.aiOracleAddress)) {
     throw new Error(`NEAR contract signs for AiOracle ${target} on ${settings.chain}, relayer is configured for ${settings.aiOracleAddress}`);

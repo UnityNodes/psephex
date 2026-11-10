@@ -12,9 +12,11 @@ use std::collections::BTreeSet;
 mod chain;
 mod migrate;
 mod near_requests;
+mod owner;
 
 pub use chain::{evm_chain_key, near_chain_key, parse_chain, Chain};
 pub use near_requests::{NearRequest, NearRequestView};
+pub use owner::{OwnerAction, ProposalView};
 
 const SIGN_GAS: Gas = Gas::from_tgas(50);
 const CALLBACK_GAS: Gas = Gas::from_tgas(20);
@@ -52,6 +54,9 @@ pub struct AiOracle {
     near_fee: u128,
     near_requests: LookupMap<u64, NearRequest>,
     last_near_request_id: u64,
+    owner_delay_ns: u64,
+    proposals: IterableMap<u64, owner::Proposal>,
+    last_proposal_id: u64,
 }
 
 #[near(serializers = [borsh])]
@@ -236,6 +241,7 @@ fn fulfill_calldata(request_id: u64, answer_code: u8, question_hash: [u8; 32]) -
 #[near]
 impl AiOracle {
     #[init]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         owner: AccountId,
         signer: AccountId,
@@ -245,6 +251,7 @@ impl AiOracle {
         oracle_address: String,
         max_fee_per_gas_cap: U128,
         near_fee: U128,
+        owner_delay_seconds: u64,
     ) -> Self {
         require!(max_fee_per_gas_cap.0 > 0, "fee cap must be positive");
         let mut contract = Self {
@@ -260,6 +267,9 @@ impl AiOracle {
             near_fee: near_requests::checked_near_fee(near_fee.0),
             near_requests: LookupMap::new(b"n"),
             last_near_request_id: 0,
+            owner_delay_ns: owner::owner_delay_ns(owner_delay_seconds),
+            proposals: IterableMap::new(b"o"),
+            last_proposal_id: 0,
         };
         contract.put_chain(chain_id, chain_name, oracle_address);
         contract
@@ -321,6 +331,10 @@ impl AiOracle {
     pub fn set_max_fee_per_gas_cap(&mut self, cap: U128) {
         self.assert_owner();
         require!(cap.0 > 0, "fee cap must be positive");
+        require!(
+            cap.0 <= self.max_fee_per_gas_cap,
+            "raising the gas cap goes through propose"
+        );
         self.max_fee_per_gas_cap = cap.0;
     }
 
@@ -328,7 +342,7 @@ impl AiOracle {
         U128(self.max_fee_per_gas_cap)
     }
 
-    pub fn set_model_key(
+    pub(crate) fn set_model_key(
         &mut self,
         model: String,
         provider: String,
@@ -360,12 +374,12 @@ impl AiOracle {
         );
     }
 
-    pub fn remove_model_key(&mut self, model: String) {
+    pub(crate) fn remove_model_key(&mut self, model: String) {
         self.assert_owner();
         self.model_keys.remove(&model);
     }
 
-    pub fn set_chain(&mut self, chain_id: u64, name: String, oracle_address: String) {
+    pub(crate) fn set_chain(&mut self, chain_id: u64, name: String, oracle_address: String) {
         self.assert_owner();
         require!(
             !self.pending.iter().any(|(c, _)| *c == chain_id),
@@ -374,7 +388,7 @@ impl AiOracle {
         self.put_chain(chain_id, name, oracle_address);
     }
 
-    pub fn remove_chain(&mut self, chain_id: u64) -> bool {
+    pub(crate) fn remove_chain(&mut self, chain_id: u64) -> bool {
         self.assert_owner();
         require!(
             !self.pending.iter().any(|(c, _)| *c == chain_id),
@@ -395,7 +409,7 @@ impl AiOracle {
             .collect()
     }
 
-    pub fn reset_fulfilled(&mut self, chain: String, request_id: u64) -> bool {
+    pub(crate) fn reset_fulfilled(&mut self, chain: String, request_id: u64) -> bool {
         self.assert_owner();
         let key = (Self::evm_chain_id(&chain), request_id);
         let was_pending = self.pending.remove(&key);
@@ -425,6 +439,8 @@ impl AiOracle {
             "near_fee": U128(self.near_fee),
             "last_near_request_id": self.last_near_request_id,
             "models": self.model_keys.len(),
+            "owner_delay_seconds": self.owner_delay_seconds(),
+            "open_proposals": self.proposals.len(),
         })
     }
 
