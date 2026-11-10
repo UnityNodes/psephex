@@ -176,7 +176,7 @@ ORACLE_ADDRESS=0x3A915e664Bc3c87954b9C1CaD2146B44A8a2e35F OWNER_ADDRESS=0x... FE
   forge script script/DeployV2.s.sol:DeployV2 --rpc-url base_sepolia --broadcast --account <keystore>
 ```
 
-The script refuses any chain other than Base Sepolia (84532) and local simulation (31337), and a timeout outside 1 s..7 days. `ORACLE_ADDRESS` is the EVM address derived from the MPC key of `oracle.psephex.testnet` with path `base-1` (`docs/evidence/DEPLOY-near-oracle-v2.md`).
+The script refuses any chain other than Base Sepolia (84532) and local simulation (31337), and a timeout outside 1 s..7 days. `ORACLE_ADDRESS` is the EVM address derived from the MPC key of `oracle.psephex.testnet` with path `base-1`.
 
 ## History: v1 (live 08.11.2026)
 
