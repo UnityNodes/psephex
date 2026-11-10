@@ -2160,7 +2160,7 @@ fn failed_sign_logs_sign_failed_event() {
 #[test]
 fn accepts_a_real_phala_gateway_answer_under_the_dstack_scheme() {
     let fx: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../docs/evidence/runs/phala-signature.json"
+        "fixtures/phala-signature.json"
     ))
     .unwrap();
     let s = |k: &str| fx[k].as_str().unwrap().to_string();
@@ -2210,7 +2210,7 @@ fn accepts_a_real_phala_gateway_answer_under_the_dstack_scheme() {
 #[test]
 fn the_two_schemes_are_not_interchangeable() {
     let fx: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../docs/evidence/runs/phala-signature.json"
+        "fixtures/phala-signature.json"
     ))
     .unwrap();
     let s = |k: &str| fx[k].as_str().unwrap().to_string();

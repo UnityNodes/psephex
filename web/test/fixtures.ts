@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const EVIDENCE = resolve(process.cwd(), "../docs/evidence/runs/stage5-api-merged");
+const EVIDENCE = resolve(import.meta.dirname, "fixtures/api");
 
 export function evidence(name: string): unknown {
   return JSON.parse(readFileSync(resolve(EVIDENCE, name), "utf8"));

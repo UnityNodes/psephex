@@ -1,0 +1,12 @@
+{
+  "request_id": 1000,
+  "question": "Contract: deliver a logo as a PNG file of at least 512x512 pixels. Evidence: the claimant delivered logo.png, 1024x1024 pixels, PNG format. Was the contract fulfilled?",
+  "model": "phala/gemma-4-26b-a4b-uncensored",
+  "request_body": "{\"model\":\"phala/gemma-4-26b-a4b-uncensored\",\"messages\":[{\"role\":\"user\",\"content\":\"You are a neutral oracle resolving request #1000 for the AiOracle contract 0x792bca54672763af3b1faa1fb62d3cb2fcff6111 on EVM chain 84532. Question: Contract: deliver a logo as a PNG file of at least 512x512 pixels. Evidence: the claimant delivered logo.png, 1024x1024 pixels, PNG format. Was the contract fulfilled? Answer with exactly one word: YES, NO or UNKNOWN.\"}],\"temperature\":0,\"seed\":42,\"max_tokens\":8,\"stream\":false,\"chat_template_kwargs\":{\"enable_thinking\":false}}",
+  "response_body": "{\"id\":\"req_251bf91d2bc28cac986cbb1e879449a5\",\"object\":\"chat.completion\",\"created\":1794210833,\"model\":\"phala/gemma-4-26b-a4b-uncensored\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"YES\",\"reasoning_content\":null},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":142,\"total_tokens\":144,\"completion_tokens\":2,\"prompt_tokens_details\":{\"cached_tokens\":128},\"completion_tokens_details\":{\"reasoning_tokens\":0},\"reasoning_tokens\":0,\"cost\":9.9e-6}}",
+  "text": "f389235097542dd040d9dbd338b9d9f537094144fffe06ecbebe05a48f07ad04:88fcfe78e13b3d3f898e2725c9aca1244ce675a7e04a0e7a59332e65037ceb17",
+  "signature_hex": "35d8466626b53b2439929c2f6469468bc5ebf2b0f32d23dd5099cfb986c8dc9b460a82e095d2baa0f461df5703668eba4f40e317d0f7eeca9b8d478c215bc008",
+  "signing_public_key": "0393482f770bf58c81d915ad15fba8dc393d349e1f058116107e7b07307755a6",
+  "signing_algo": "ed25519",
+  "signature_query": "?signing_algo=ed25519"
+}
