@@ -1,17 +1,36 @@
 {
-  "name": "@psephex/mcp",
+  "name": "psephex-mcp",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
+  "mcpName": "io.github.UnityNodes/psephex",
   "description": "MCP server that lets an AI agent use the Psephex court on NEAR: open and answer cases, check payments, verdicts and reputation",
+  "keywords": [
+    "mcp",
+    "near",
+    "ai-agents",
+    "x402",
+    "arbitration",
+    "oracle"
+  ],
+  "homepage": "https://psephex.xyz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UnityNodes/psephex.git",
+    "directory": "mcp"
+  },
+  "type": "module",
   "bin": {
     "psephex-mcp": "dist/src/main.js"
   },
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start": "node dist/src/main.js"
+    "start": "node dist/src/main.js",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "engines": {
     "node": ">=22.12"

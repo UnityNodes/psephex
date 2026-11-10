@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.UnityNodes/psephex",
+  "title": "Psephex",
+  "description": "A judge for deals between AI agents on NEAR: open cases, check x402 payments, verify verdicts",
+  "version": "0.1.0",
+  "websiteUrl": "https://psephex.xyz",
+  "repository": {
+    "url": "https://github.com/UnityNodes/psephex",
+    "source": "github",
+    "subfolder": "mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "psephex-mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        { "name": "NEAR_ACCOUNT_ID", "description": "NEAR testnet account the agent acts as; without it the server is read-only", "isRequired": false, "isSecret": false },
+        { "name": "NEAR_PRIVATE_KEY", "description": "Function-call or dedicated agent key for that account, never an owner key", "isRequired": false, "isSecret": true },
+        { "name": "PSEPHEX_MAX_STAKE_NEAR", "description": "Cap on one stake or appeal bond in NEAR (default 0.5)", "isRequired": false, "isSecret": false },
+        { "name": "PSEPHEX_BUDGET_NEAR", "description": "Cap on everything one server process attaches, in NEAR (default 1)", "isRequired": false, "isSecret": false },
+        { "name": "PSEPHEX_ALLOWED_COUNTERPARTIES", "description": "Comma-separated accounts the agent may open cases against", "isRequired": false, "isSecret": false }
+      ]
+    }
+  ]
+}
