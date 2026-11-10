@@ -1,0 +1,14 @@
+node_modules/
+contracts/base/out/
+contracts/base/cache/
+target/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+dist/
+coverage/
+web/test-results/
+web/playwright-report/
+web/public/fonts/
