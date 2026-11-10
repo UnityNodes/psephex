@@ -77,6 +77,7 @@ jobs:
       - run: npm run audit
       - run: npm run typecheck
       - run: npm run coverage
+      - run: bash ../scripts/fetch-fonts.sh
       - run: npx vite build
         env:
           VITE_API_URL: http://127.0.0.1:8790
