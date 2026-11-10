@@ -13,7 +13,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "audit": "node scripts/audit.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",
@@ -66,5 +67,10 @@
     "typescript": "5.9.3",
     "vite": "8.3.4",
     "vitest": "5.0.5"
+  },
+  "overrides": {
+    "bs58@4.0.0": "4.0.1",
+    "nanoid@>=4 <5.1.16": "5.1.16",
+    "secp256k1@5.0.0": "5.0.1"
   }
 }

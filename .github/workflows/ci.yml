@@ -74,7 +74,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: npm audit --audit-level=high --omit=dev
+      - run: npm run audit
       - run: npm run typecheck
       - run: npm run coverage
       - run: npx vite build
