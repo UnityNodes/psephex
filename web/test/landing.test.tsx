@@ -68,6 +68,7 @@ describe("Landing", () => {
     expect(limits).toHaveTextContent(/which is why the court has an appeal/);
     expect(limits).toHaveTextContent(/The arbiter is one person today/);
     expect(screen.getByRole("region", { name: "What a verdict proves" })).toHaveTextContent(/80 of 80/);
+    expect(screen.getByRole("region", { name: "What a verdict proves" })).toHaveTextContent(/applies only 24 hours later/);
   });
 
   it("shows live numbers and the latest verdict from the API", async () => {

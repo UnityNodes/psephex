@@ -22,7 +22,7 @@ Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app]
 
 | What | Where |
 |---|---|
-| NEAR oracle contract | [`oracle.psephex.testnet`](https://testnet.nearblocks.io/address/oracle.psephex.testnet) (v3, wasm sha256 `7cda49c4…`): `ask`, `fulfill_on_near`, `verify_consensus`, Chain Signatures for EVM |
+| NEAR oracle contract | [`oracle.psephex.testnet`](https://testnet.nearblocks.io/address/oracle.psephex.testnet) (v4, wasm sha256 `0f390e19…`, no access keys): `ask`, `fulfill_on_near`, `verify_consensus`, Chain Signatures for EVM, owner changes only through `propose` with a 24-hour delay |
 | NEAR court (agent deals, both sides, appeal) | [`psephex-court.testnet`](https://testnet.nearblocks.io/address/psephex-court.testnet): owner and arbiter `psephex.testnet` (key offline) |
 | NEAR dispute v1 (one-sided escrow example) | [`dispute.psephex.testnet`](https://testnet.nearblocks.io/address/dispute.psephex.testnet): stake in NEAR, verdict through `on_answer` |
 | AiOracle | Base Sepolia [`0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111`](https://sepolia.basescan.org/address/0x792bCa54672763Af3B1FaA1Fb62d3Cb2fCff6111) |
@@ -73,6 +73,15 @@ Expect `0x3A915e664Bc3c87954b9C1CaD2146B44A8a2e35F`: the answer was delivered by
 
 The API only hands over the arguments; the check runs on the NEAR contract. Change one character of a `response_body` in either JSON file and run its `verify_consensus` again: it returns `"ok": false` with `invalid signature`. Swap the `chain` field between the two files and the signatures fail too: an answer signed for one source does not verify for another.
 
+**The owner's hands are tied.** The oracle account has no keys, so code changes only through an announced upgrade:
+
+```bash
+near account list-keys oracle.psephex.testnet network-config testnet now
+near contract call-function as-read-only oracle.psephex.testnet proposals json-args {} network-config testnet now
+near contract call-function as-read-only oracle.psephex.testnet owner_delay_seconds json-args {} network-config testnet now
+```
+Expect no keys, the open proposals with the time each may run (`ready_at_ns`), and `"86400"`. Every proposal also logs an `owner_change_proposed` event.
+
 ## Two agents settle a deal
 
 A case runs on testnet between two agent accounts, `psephex-agent-buyer.testnet` and `psephex-agent-seller.testnet`:
@@ -112,15 +121,16 @@ Proves:
 - The models saw the request the NEAR contract built from the question asked on NEAR or on Base.
 - Only the MPC-derived address can deliver the answer, and only for the matching id and question.
 - Answers repeat in practice: 80 of 80 repeats matched in the first check, 90 of 90 for the dashboard examples on NEAR AI and 30 of 30 on Phala.
+- The court's code cannot change: `psephex-court.testnet` has no access keys since its deploy.
+- The oracle's rules cannot change under a case. Since 10 November `oracle.psephex.testnet` has no access keys, and a new model key, EVM target, reset of a settled request, higher gas cap or new code is announced on chain with `propose` and runs only 24 hours later, within a seven-day window. New code runs only if its sha256 was announced.
 
 Does not prove:
 - That the answer is right. In request 2 all three models said 9 is a prime number, and the oracle delivered that.
 - That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.
 - Fully independent operators. Two models run on NEAR AI and one on Phala; on Phala one attested gateway signs for the model it routes to.
 - Knowledge of fresh events. The evidence has to be in the question.
-- The court's code cannot change: `psephex-court.testnet` has no access keys since its deploy.
-- Immutable oracle code. The NEAR accounts `oracle.psephex.testnet`, `dispute.psephex.testnet` and `psephex.testnet` have one full-access key, held offline by the author (`ed25519:3rU5Lw…GkuQf`); the server only has function-call keys of `relayer.psephex.testnet` that can submit answers, not change code. The author can still upgrade the oracle code, and the oracle code decides what the MPC network signs for Base and Arbitrum.
-- A fixed model set. The owner of the NEAR contract can change it. Qwen3.8 27B answered requests 1 to 10 and was replaced by Gemma on 2026-11-09; `verify_consensus` checks the current set, so those requests are verified by their NEAR and Base transactions.
+- Immutable oracle code. The owner `psephex.testnet` (key held offline by the author) can still replace the models or the code in the open, a day after announcing it, and the oracle code decides what the MPC network signs for Base and Arbitrum. The server only has function-call keys of `relayer.psephex.testnet` that can submit answers. `dispute.psephex.testnet`, the v1 example, still has a full-access key.
+- A fixed model set. Qwen3.8 27B answered requests 1 to 10 and was replaced by Gemma on 2026-11-09; `verify_consensus` checks the current set, so those requests are verified by their NEAR and Base transactions.
 
 Intel's DCAP signature chain on the TDX quotes was not verified by us; we checked that each quote's report data holds the signing key and our nonce.
 

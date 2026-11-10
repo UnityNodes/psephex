@@ -68,6 +68,7 @@ const PROVES: readonly string[] = [
   "The models saw the request the NEAR contract built from the stored question, with temperature 0 and a fixed seed inside the signed request.",
   "On Base and Arbitrum, only the MPC-derived address can deliver the answer, and only for the matching id and question. There is no bridge and no oracle key on a server.",
   "Answers repeat in practice: 80 of 80 repeats matched in our first check, and 90 of 90 for the dashboard examples.",
+  "The rules cannot change under a case. A new model set, chain target or oracle code is announced on NEAR and applies only 24 hours later, and the oracle account has no keys, so that announcement is the only way in.",
 ];
 
 function Count({ n, word }: { n: number; word?: string }) {
@@ -204,7 +205,7 @@ function Limits() {
           </li>
           <li>
             <X className="mt-1 size-4 text-no" aria-hidden="true" />
-            <span>A fixed set of models. The owner of the NEAR contract can change it.</span>
+            <span>A fixed set of models forever. The owner can still replace a model or the code, in the open, a day after announcing it.</span>
           </li>
         </ul>
       </section>
