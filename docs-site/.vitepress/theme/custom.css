@@ -1,0 +1,222 @@
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/CabinetGrotesk-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Satoshi";
+  src: url("/fonts/Satoshi-Variable.woff2") format("woff2");
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --stone: #e6e9ee;
+  --paper: #f6f7f9;
+  --raised: #ffffff;
+  --ink: #1b2430;
+  --muted: #545e6c;
+  --line: #c3cad4;
+  --yes: #276a5c;
+  --no: #8e2f2f;
+  --bronze: #a0712c;
+  --bronze-text: #7f5720;
+  --bronze-fill-hover: #6a4819;
+  --on-bronze: #ffffff;
+  --bronze-hi: #d7a862;
+  --vault: #1b2430;
+  --vault-ink: #eef0f3;
+  --vault-line: #3a4656;
+  --glow: rgb(160 113 44 / 0.1);
+
+  --vp-font-family-base: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --vp-font-family-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --vp-c-bg: var(--paper);
+  --vp-c-bg-alt: var(--stone);
+  --vp-c-bg-elv: var(--raised);
+  --vp-c-bg-soft: var(--stone);
+  --vp-c-text-1: var(--ink);
+  --vp-c-text-2: var(--muted);
+  --vp-c-text-3: #6b7480;
+  --vp-c-divider: var(--line);
+  --vp-c-border: var(--line);
+  --vp-c-gutter: var(--line);
+
+  --vp-c-brand-1: var(--bronze-text);
+  --vp-c-brand-2: var(--bronze-fill-hover);
+  --vp-c-brand-3: var(--bronze-text);
+  --vp-c-brand-soft: rgb(160 113 44 / 0.14);
+
+  --vp-c-tip-1: var(--yes);
+  --vp-c-tip-soft: rgb(39 106 92 / 0.1);
+  --vp-c-danger-1: var(--no);
+  --vp-c-danger-soft: rgb(142 47 47 / 0.1);
+
+  --vp-code-bg: var(--stone);
+  --vp-code-color: var(--ink);
+  --vp-code-block-bg: var(--vault);
+  --vp-code-block-color: var(--vault-ink);
+  --vp-code-block-divider-color: var(--vault-line);
+  --vp-code-copy-code-bg: var(--vault);
+  --vp-code-copy-code-hover-bg: #26303e;
+  --vp-code-copy-code-border-color: var(--vault-line);
+  --vp-code-lang-color: var(--bronze-hi);
+
+  --vp-button-brand-bg: var(--bronze-text);
+  --vp-button-brand-hover-bg: var(--bronze-fill-hover);
+  --vp-button-brand-text: var(--on-bronze);
+
+  --vp-home-hero-name-color: var(--ink);
+  --vp-local-search-highlight-bg: var(--bronze);
+  --vp-local-search-highlight-text: var(--on-bronze);
+}
+
+.dark {
+  --stone: #141618;
+  --paper: #1c1f22;
+  --raised: #23272b;
+  --ink: #ebe7df;
+  --muted: #a3a8ae;
+  --line: #33383e;
+  --yes: #5fb39b;
+  --no: #e07d70;
+  --bronze: #c8924a;
+  --bronze-text: #dcaa68;
+  --bronze-fill-hover: #e7bd7c;
+  --on-bronze: #141618;
+  --bronze-hi: #e7bd7c;
+  --vault: #0e1011;
+  --vault-ink: #e2ded6;
+  --vault-line: #2b3035;
+  --glow: rgb(200 146 74 / 0.14);
+
+  --vp-c-text-3: #80868d;
+  --vp-c-brand-soft: rgb(200 146 74 / 0.16);
+  --vp-c-tip-soft: rgb(95 179 155 / 0.12);
+  --vp-c-danger-soft: rgb(224 125 112 / 0.12);
+  --vp-code-copy-code-hover-bg: #181b1d;
+  --vp-button-brand-bg: var(--bronze);
+  --vp-button-brand-hover-bg: var(--bronze-text);
+}
+
+.vp-doc .shiki,
+.vp-doc [class*="language-"] code {
+  color: var(--vp-code-block-color);
+}
+
+html.dark .vp-doc [class*="language-"] .shiki span,
+html:not(.dark) .vp-doc [class*="language-"] .shiki span {
+  color: var(--shiki-dark);
+}
+
+::selection {
+  background: var(--bronze);
+  color: var(--on-bronze);
+}
+
+:focus-visible {
+  outline: 2px solid var(--bronze);
+  outline-offset: 2px;
+}
+
+.VPNavBarTitle .title,
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.vp-doc h1 {
+  font-size: 2.6rem;
+  line-height: 1.05;
+  font-weight: 800;
+}
+
+.vp-doc h2 {
+  font-weight: 800;
+  border-top-color: var(--line);
+}
+
+.vp-doc h3 {
+  font-weight: 700;
+}
+
+.VPNavBarTitle .title {
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+
+.VPContent {
+  background-image: radial-gradient(60rem 30rem at 85% -10%, var(--glow), transparent 70%);
+  background-repeat: no-repeat;
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+  font-size: 0.92rem;
+}
+
+.vp-doc td code,
+.vp-doc th code {
+  word-break: break-all;
+}
+
+.vp-doc .lede {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+  max-width: 62ch;
+}
+
+.vp-doc .verdict-path {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 1.6rem 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.vp-doc .verdict-path li {
+  margin: 0;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--raised);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  counter-increment: step;
+  grid-column: span 2;
+}
+
+.vp-doc .verdict-path li:nth-child(n + 4) {
+  grid-column: span 3;
+}
+
+@media (max-width: 640px) {
+  .vp-doc .verdict-path li,
+  .vp-doc .verdict-path li:nth-child(n + 4) {
+    grid-column: 1 / -1;
+  }
+}
+
+.vp-doc .verdict-path li::before {
+  content: counter(step) ". ";
+  font-weight: 700;
+  color: var(--bronze-text);
+}
+
+.vp-doc .verdict-path strong {
+  display: block;
+  font-family: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  color: var(--ink);
+}

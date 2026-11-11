@@ -178,6 +178,7 @@ contracts/base   AiOracle, Dispute and the YesNoClient example (Solidity, Foundr
 relayer          relayer state machine and the read-only API (TypeScript)
 web              landing and dashboard (Vite, React, wagmi)
 mcp              MCP server for agents, with the x402 and LLM agent examples
+docs-site        documentation at docs.psephex.xyz (VitePress)
 ```
 
 ## Built during the hackathon, libraries and AI

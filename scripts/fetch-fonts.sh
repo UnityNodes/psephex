@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEST="$ROOT/web/public/fonts"
+DEST="$(realpath -m "${1:-$ROOT/web/public/fonts}")"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 

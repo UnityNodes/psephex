@@ -267,7 +267,7 @@ function ForAgents() {
         <p className="m-0 flex flex-wrap gap-x-5 gap-y-2 text-sm">
           <ExternalLink href={MCP_NPM_URL}>Package on npm</ExternalLink>
           <ExternalLink href={MCP_REGISTRY_URL}>MCP Registry entry</ExternalLink>
-          {DOCS_URL && <ExternalLink href={`${DOCS_URL}/agents/mcp`}>Agent quickstart</ExternalLink>}
+          {DOCS_URL && <ExternalLink href={`${DOCS_URL}/guide/agents`}>Agent quickstart</ExternalLink>}
         </p>
       </div>
       <div className="flex min-w-0 flex-col gap-4">
