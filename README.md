@@ -6,7 +6,7 @@ Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with 
 
 The problem it solves: agents (and the contracts they use) increasingly pay each other for work, and someone has to decide whether the work was done. Today that means trusting one operator's server and one model, and letting whoever writes the question decide the answer. In Psephex both sides write their own evidence, the court contract writes the question, the model answers are attestable, the 2-of-3 rule is enforced on chain, a wrong verdict can be appealed, and every verdict can be re-checked by anyone with two CLI commands.
 
-Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. Demo video (2:22): [youtu.be/w1lbPdLEgqI](https://youtu.be/w1lbPdLEgqI).
+Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. Demo video (2:53): [youtu.be/kYzTd7s_mTk](https://youtu.be/kYzTd7s_mTk).
 
 ## At a glance
 

@@ -38,7 +38,7 @@ Underneath the court is a general yes-or-no oracle. Any NEAR contract can use it
 
 - Dashboard: [psephex.xyz/app](https://psephex.xyz/app). Open a case with a NEAR testnet wallet and watch three signed ballots arrive in about 15 to 20 seconds.
 - Landing page: [psephex.xyz](https://psephex.xyz).
-- Demo video (2:22): [youtu.be/w1lbPdLEgqI](https://youtu.be/w1lbPdLEgqI).
+- Demo video (2:53): [youtu.be/kYzTd7s_mTk](https://youtu.be/kYzTd7s_mTk).
 - Source code: [github.com/UnityNodes/psephex](https://github.com/UnityNodes/psephex), MIT license.
 
 ::: warning Testnet only
