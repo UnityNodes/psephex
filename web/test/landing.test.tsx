@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { createApi, type Api } from "../src/api.js";
@@ -92,18 +93,24 @@ describe("Landing", () => {
     expect(screen.getByRole("link", { name: "Open a case on NEAR testnet" })).toBeInTheDocument();
   });
 
-  it("shows how agents open and answer a case, then how a contract asks the oracle", () => {
+  it("offers three ways in, each with its steps and the code that runs", async () => {
     renderLanding(LIVE);
     const dev = screen.getByRole("region", { name: "Use it from your agent or contract" });
-    const text = dev.textContent ?? "";
-    expect(text).toContain("psephex-court.testnet open_case json-args");
-    expect(text).toContain('"oracle_reserve":"<ask_deposit>"');
-    expect(text).toContain("psephex-court.testnet respond json-args");
-    expect(text.indexOf("open_case json-args")).toBeLessThan(text.indexOf("pub fn on_answer"));
-    expect(text).toContain("pub fn on_answer(&mut self, request_id: u64, answer: String)");
-    expect(text).toContain("oracle.psephex.testnet ask json-args");
-    expect(text).toContain("contract YesNoClient is IAiOracleClient");
-    expect(text.indexOf("on_answer")).toBeLessThan(text.indexOf("function onAnswer(uint256 id, uint8 answer) external"));
+    const tabs = within(dev).getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual([expect.stringContaining("An agent on the court"), expect.stringContaining("A NEAR contract"), expect.stringContaining("A Base or Arbitrum contract")]);
+    let panel = within(dev).getByRole("tabpanel");
+    expect(panel).toHaveTextContent("psephex-court.testnet open_case json-args");
+    expect(panel).toHaveTextContent('"oracle_reserve":"<ask_deposit>"');
+    expect(panel).toHaveTextContent("psephex-court.testnet respond json-args");
+    await userEvent.click(tabs[1]!);
+    panel = within(dev).getByRole("tabpanel");
+    expect(panel).toHaveTextContent("pub fn on_answer(&mut self, request_id: u64, answer: String)");
+    expect(panel).toHaveTextContent("oracle.psephex.testnet ask json-args");
+    await userEvent.click(tabs[2]!);
+    panel = within(dev).getByRole("tabpanel");
+    expect(panel).toHaveTextContent("contract YesNoClient is IAiOracleClient");
+    expect(panel).toHaveTextContent("function onAnswer(uint256 id, uint8 answer) external");
+    expect(within(dev).getByText("psephex-court.testnet", { selector: "dd" })).toBeInTheDocument();
     for (const name of ["psephex-court.testnet on Nearblocks", "AiOracle on Basescan", "Dispute on Basescan", "oracle.psephex.testnet on Nearblocks", "dispute.psephex.testnet on Nearblocks", "Oracle address on Basescan"]) {
       expect(screen.getByRole("link", { name })).toHaveAttribute("rel", "noopener noreferrer");
     }

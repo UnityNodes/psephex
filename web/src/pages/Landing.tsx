@@ -2,17 +2,16 @@ import { m, useReducedMotion } from "motion/react";
 import { Check, Cpu, FileText, Gavel, MessageSquareReply, ShieldCheck, X } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router";
-import clientSource from "../../../contracts/base/src/examples/YesNoClient.sol?raw";
 import type { Stats } from "../api.js";
 import { LivePath } from "../components/LivePath.js";
-import { CopyButton } from "../components/Commands.js";
+import { CodePanel } from "../components/CodePanel.js";
+import { ForDevelopers } from "../components/ForDevelopers.js";
 import { SiteFooter } from "../components/SiteFooter.js";
 import { SiteHeader } from "../components/SiteHeader.js";
 import { Button } from "../components/ui/button.js";
 import { NumberTicker } from "../components/ui/number-ticker.js";
-import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, DOCS_URL, NEAR_COURT_CONTRACT, NEAR_ORACLE_CONTRACT } from "../deployment.js";
+import { DOCS_URL } from "../deployment.js";
 import { CLAUDE_CODE_SNIPPET, MCP_CONFIG_SNIPPET, MCP_NPM_URL, MCP_PACKAGE, MCP_REGISTRY_NAME, MCP_REGISTRY_URL, MCP_TOOL_GROUPS } from "../lib/mcp.js";
-import { COURT_CLI_SNIPPET, NEAR_CLIENT_SNIPPET, ORACLE_CLI_SNIPPET } from "../lib/snippets.js";
 import { SOURCES, SOURCE_SHORT } from "../sources.js";
 import { useLatestVerdict, usePageTitle, useStats } from "../hooks.js";
 
@@ -214,20 +213,6 @@ function Limits() {
   );
 }
 
-function CodePanel({ name, code, wrap = false }: { name: string; code: string; wrap?: boolean }) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-vault-line bg-vault p-4 text-vault-ink">
-      <div className="mb-3 flex items-center justify-between gap-2 border-b border-vault-line pb-3">
-        <span className="font-mono text-xs text-bronze-hi">{name}</span>
-        <CopyButton text={code} />
-      </div>
-      <pre className={`m-0 overflow-x-auto font-mono text-xs leading-relaxed ${wrap ? "break-all whitespace-pre-wrap" : ""}`}>
-        <code>{code}</code>
-      </pre>
-    </div>
-  );
-}
-
 function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-bronze-text">
@@ -273,57 +258,6 @@ function ForAgents() {
       <div className="flex min-w-0 flex-col gap-4">
         <CodePanel name="Claude Code" code={CLAUDE_CODE_SNIPPET} wrap />
         <CodePanel name="Any MCP client (stdio, Node 22.12+)" code={MCP_CONFIG_SNIPPET} />
-      </div>
-    </section>
-  );
-}
-
-function ForDevelopers() {
-  return (
-    <section id="developers" aria-labelledby="dev-heading" className="grid scroll-mt-6 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-      <div className="flex flex-col gap-4">
-        <h2 id="dev-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
-          Use it from your agent or contract
-        </h2>
-        <h3 className="m-0 font-display text-xl font-bold">An agent opens and answers a case</h3>
-        <p className="m-0 text-muted [overflow-wrap:anywhere]">
-          The buyer agent reads <code className="font-mono text-sm">ask_deposit</code> on {NEAR_ORACLE_CONTRACT} for a 2000-byte question and <code className="font-mono text-sm">storage_deposit(claim, evidence)</code> on {NEAR_COURT_CONTRACT}, then calls{" "}
-          <code className="font-mono text-sm">open_case</code> with the stake plus both amounts attached. The oracle part is a reserve: the court pays the exact price once the question is final and sends the rest back. The seller agent calls{" "}
-          <code className="font-mono text-sm">respond(case_id, response)</code> within the window. After the verdict, a party can <code className="font-mono text-sm">appeal</code> with the bond, and anyone can <code className="font-mono text-sm">finalize</code> once the window ends.
-        </p>
-        <h3 className="m-0 font-display text-xl font-bold">A contract asks the oracle directly</h3>
-        <p className="m-0 text-muted [overflow-wrap:anywhere]">
-          Call <code className="font-mono text-sm">ask</code> on {NEAR_ORACLE_CONTRACT} with the deposit from <code className="font-mono text-sm">ask_deposit(question)</code> and <code className="font-mono text-sm">callback: true</code>, and implement{" "}
-          <code className="font-mono text-sm">on_answer(request_id, answer)</code>. The answer is YES, NO or UNKNOWN and stays readable through <code className="font-mono text-sm">near_request(request_id)</code>. The court is such a client.
-        </p>
-        <h3 className="m-0 font-display text-xl font-bold">From Solidity</h3>
-        <p className="m-0 text-muted">
-          On Base or Arbitrum, call <code className="font-mono text-sm">ask</code> with the fee and implement <code className="font-mono text-sm">onAnswer</code>. AiOracle calls it with 0 for UNKNOWN, 1 for YES and 2 for NO, with up to 200,000 gas. NEAR signs that delivery through Chain Signatures. YesNoClient.sol is the contract the test suite runs against AiOracle, not a sketch.
-        </p>
-        <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-muted">Court on NEAR</dt>
-          <dd className="m-0 font-mono text-xs break-all">{NEAR_COURT_CONTRACT}</dd>
-          <dt className="text-muted">Oracle on NEAR</dt>
-          <dd className="m-0 font-mono text-xs break-all">{NEAR_ORACLE_CONTRACT}</dd>
-          <dt className="text-muted">Case texts</dt>
-          <dd className="m-0">claim, evidence and response, 400 bytes each, one line</dd>
-          <dt className="text-muted">AiOracle on Base</dt>
-          <dd className="m-0 font-mono text-xs break-all">{AIORACLE_ADDRESS}</dd>
-          {ARBITRUM_AI_ORACLE && (
-            <>
-              <dt className="text-muted">AiOracle on Arbitrum</dt>
-              <dd className="m-0 font-mono text-xs break-all">{ARBITRUM_AI_ORACLE}</dd>
-            </>
-          )}
-          <dt className="text-muted">Oracle question</dt>
-          <dd className="m-0">up to 2000 bytes, answered YES, NO or UNKNOWN</dd>
-        </dl>
-      </div>
-      <div className="flex min-w-0 flex-col gap-4">
-        <CodePanel name="Agents on the court (near CLI)" code={COURT_CLI_SNIPPET} wrap />
-        <CodePanel name="NEAR contract asking the oracle (Rust)" code={NEAR_CLIENT_SNIPPET} />
-        <CodePanel name="Oracle from the near CLI" code={ORACLE_CLI_SNIPPET} wrap />
-        <CodePanel name="YesNoClient.sol" code={clientSource} />
       </div>
     </section>
   );
