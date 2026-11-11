@@ -1,12 +1,16 @@
-import { Cpu, KeyRound, ShieldCheck } from "lucide-react";
+import { Clock, Cpu, KeyRound, ShieldCheck } from "lucide-react";
 import { m } from "motion/react";
 import { useState } from "react";
+import { ZodError } from "zod";
 import { useEnter } from "../lib/motion.js";
 import type { ModelView } from "../api.js";
 import { CopyButton } from "../components/Commands.js";
 import { Badge } from "../components/ui/badge.js";
-import { attestationUrl } from "../deployment.js";
+import { attestationUrl, NEAR_ORACLE_CONTRACT } from "../deployment.js";
 import { useModels, usePageTitle } from "../hooks.js";
+import { describeAction, formatDelay, proposalTiming, type Proposal, type ProposalTiming } from "../lib/owner.js";
+import { useNowNs } from "../near/court-hooks.js";
+import { useOwnerChanges } from "../near/hooks.js";
 
 const PROVIDER: Readonly<Record<string, string>> = { "near-ai": "NEAR AI Cloud", phala: "Phala" };
 
@@ -73,6 +77,70 @@ export function ModelEntry({ m: model, index = 0 }: { m: ModelView; index?: numb
   );
 }
 
+const UTC = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+
+function timingText(t: ProposalTiming): string {
+  const when = `${UTC.format(t.at)} UTC`;
+  if (t.state === "waiting") return `Can apply from ${when}`;
+  if (t.state === "ready") return `Can apply now, until ${when}`;
+  return `Expired on ${when} without being applied`;
+}
+
+function ProposalEntry({ p, nowNs }: { p: Proposal; nowNs: bigint }) {
+  const timing = proposalTiming(p, nowNs);
+  return (
+    <li className="flex flex-col gap-1 border-t border-line py-4 first:border-t-0">
+      <p className="m-0 font-medium break-words text-ink">{describeAction(p.action)}</p>
+      <p className="m-0 text-sm text-muted">
+        Announcement {p.id}. {timingText(timing)}.
+      </p>
+    </li>
+  );
+}
+
+export function OwnerChanges() {
+  const changes = useOwnerChanges();
+  const nowNs = useNowNs();
+  const delay = changes.data ? formatDelay(changes.data.delaySeconds) : null;
+  return (
+    <section aria-labelledby="changes-heading" className="flex flex-col gap-4 rounded-2xl border border-line bg-paper p-5 sm:p-6">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-raised text-bronze-text">
+          <Clock className="size-5" aria-hidden="true" />
+        </span>
+        <div className="flex flex-col gap-1">
+          <h2 id="changes-heading" className="m-0 font-display text-2xl font-bold">
+            Announced changes
+          </h2>
+          <p className="m-0 max-w-[68ch] text-muted">
+            {NEAR_ORACLE_CONTRACT} has no access keys. A new model, chain target or oracle code is announced on NEAR first and can apply only {delay ?? "a set delay"} later, so a party with a case in flight sees it coming. This list is read from the contract.
+          </p>
+        </div>
+      </div>
+      {changes.isError && (
+        <p role="alert" className="m-0 text-no">
+          {changes.error instanceof ZodError ? "The contract returned a list this page cannot read. Check it with the near CLI: proposals on " + NEAR_ORACLE_CONTRACT + "." : "NEAR testnet did not answer. Reload the page in a moment."}
+        </p>
+      )}
+      {changes.isPending && (
+        <p role="status" className="m-0 text-muted">
+          Reading the contract…
+        </p>
+      )}
+      {changes.data && !changes.isError && changes.data.proposals.length === 0 && (
+        <p className="m-0 text-ink">Nothing is announced. Any change the owner announces appears here at least {delay} before it can apply.</p>
+      )}
+      {changes.data && !changes.isError && changes.data.proposals.length > 0 && (
+        <ul className="m-0 list-none p-0">
+          {changes.data.proposals.map((p) => (
+            <ProposalEntry key={p.id} p={p} nowNs={nowNs} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function ModelsPage() {
   usePageTitle("The three models - Psephex");
   const models = useModels();
@@ -90,6 +158,7 @@ export function ModelsPage() {
           <ModelEntry key={model.model} m={model} index={i} />
         ))}
       </ul>
+      <OwnerChanges />
     </article>
   );
 }

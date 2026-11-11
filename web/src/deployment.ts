@@ -43,6 +43,13 @@ export function optionalHttpsUrl(raw: string | undefined): string | null {
 
 export const REPO_URL = optionalHttpsUrl(import.meta.env.VITE_REPO_URL);
 export const VIDEO_URL = optionalHttpsUrl(import.meta.env.VITE_VIDEO_URL);
+export function siteRoot(raw: string | null): string | null {
+  if (!raw) return null;
+  const url = new URL(raw);
+  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+}
+
+export const DOCS_URL = siteRoot(optionalHttpsUrl(import.meta.env.VITE_DOCS_URL));
 
 export const API_URL = httpUrl(import.meta.env.VITE_API_URL, "http://127.0.0.1:8790");
 export const BASE_RPC_URL = httpUrl(import.meta.env.VITE_BASE_RPC_URL, "https://sepolia.base.org");

@@ -10,7 +10,8 @@ import { SiteFooter } from "../components/SiteFooter.js";
 import { SiteHeader } from "../components/SiteHeader.js";
 import { Button } from "../components/ui/button.js";
 import { NumberTicker } from "../components/ui/number-ticker.js";
-import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, NEAR_COURT_CONTRACT, NEAR_ORACLE_CONTRACT } from "../deployment.js";
+import { AIORACLE_ADDRESS, ARBITRUM_AI_ORACLE, DOCS_URL, NEAR_COURT_CONTRACT, NEAR_ORACLE_CONTRACT } from "../deployment.js";
+import { CLAUDE_CODE_SNIPPET, MCP_CONFIG_SNIPPET, MCP_NPM_URL, MCP_PACKAGE, MCP_REGISTRY_NAME, MCP_REGISTRY_URL, MCP_TOOL_GROUPS } from "../lib/mcp.js";
 import { COURT_CLI_SNIPPET, NEAR_CLIENT_SNIPPET, ORACLE_CLI_SNIPPET } from "../lib/snippets.js";
 import { SOURCES, SOURCE_SHORT } from "../sources.js";
 import { useLatestVerdict, usePageTitle, useStats } from "../hooks.js";
@@ -227,6 +228,56 @@ function CodePanel({ name, code, wrap = false }: { name: string; code: string; w
   );
 }
 
+function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-bronze-text">
+      {children}
+    </a>
+  );
+}
+
+function ForAgents() {
+  return (
+    <section id="agents" aria-labelledby="agents-heading" className="grid scroll-mt-6 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+      <div className="flex flex-col gap-5">
+        <h2 id="agents-heading" className="m-0 font-display text-4xl font-extrabold sm:text-5xl">
+          Give your agent a court
+        </h2>
+        <p className="m-0 text-muted">
+          The Psephex MCP server lets Claude, or any agent that speaks MCP, run a case end to end: check that a payment really landed, look up the other agent's record, open or answer a case with its evidence, and re-check the verdict on NEAR. It is published on npm as{" "}
+          <code className="font-mono text-sm break-words text-ink">{MCP_PACKAGE}</code> and listed in the MCP Registry as <code className="font-mono text-sm break-words text-ink">{MCP_REGISTRY_NAME}</code>.
+        </p>
+        <dl className="m-0 flex flex-col gap-4">
+          {MCP_TOOL_GROUPS.map((g) => (
+            <div key={g.title} className="flex flex-col gap-2">
+              <dt className="font-display text-base font-bold text-ink">{g.title}</dt>
+              <dd className="m-0 flex flex-wrap gap-2">
+                {g.tools.map((t) => (
+                  <code key={t} className="rounded-md border border-line bg-paper px-2 py-1 font-mono text-xs text-ink">
+                    {t}
+                  </code>
+                ))}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="m-0 text-sm text-muted">
+          Without a NEAR key the server only reads. With one, every stake is capped: one case by <code className="font-mono text-xs break-words">PSEPHEX_MAX_STAKE_NEAR</code>, the whole session by <code className="font-mono text-xs break-words">PSEPHEX_BUDGET_NEAR</code>, and <code className="font-mono text-xs break-words">PSEPHEX_ALLOWED_COUNTERPARTIES</code> limits who the agent can open cases against, because the model driving it reads text the other side wrote. Use a function-call or dedicated agent key, never an owner key.
+        </p>
+        <p className="m-0 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          <ExternalLink href={MCP_NPM_URL}>Package on npm</ExternalLink>
+          <ExternalLink href={MCP_REGISTRY_URL}>MCP Registry entry</ExternalLink>
+          {DOCS_URL && <ExternalLink href={`${DOCS_URL}/agents/mcp`}>Agent quickstart</ExternalLink>}
+        </p>
+      </div>
+      <div className="flex min-w-0 flex-col gap-4">
+        <CodePanel name="Claude Code" code={CLAUDE_CODE_SNIPPET} wrap />
+        <CodePanel name="Any MCP client (stdio, Node 22.12+)" code={MCP_CONFIG_SNIPPET} />
+      </div>
+    </section>
+  );
+}
+
 function ForDevelopers() {
   return (
     <section id="developers" aria-labelledby="dev-heading" className="grid scroll-mt-6 gap-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
@@ -321,9 +372,17 @@ export function Landing() {
             <a href="#how" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink">
               How it works
             </a>
+            <a href="#agents" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink">
+              For agents
+            </a>
             <a href="#developers" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink">
               For developers
             </a>
+            {DOCS_URL && (
+              <a href={DOCS_URL} className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink">
+                Docs
+              </a>
+            )}
             <Link to="/app" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink sm:hidden">
               Dashboard
             </Link>
@@ -356,6 +415,7 @@ export function Landing() {
           <div id="proof" className="scroll-mt-6">
             <Limits />
           </div>
+          <ForAgents />
           <ForDevelopers />
         </main>
 

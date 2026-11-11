@@ -6,7 +6,7 @@ Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with 
 
 The problem it solves: agents (and the contracts they use) increasingly pay each other for work, and someone has to decide whether the work was done. Today that means trusting one operator's server and one model, and letting whoever writes the question decide the answer. In Psephex both sides write their own evidence, the court contract writes the question, the model answers are attestable, the 2-of-3 rule is enforced on chain, a wrong verdict can be appealed, and every verdict can be re-checked by anyone with two CLI commands.
 
-Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API). Testnet only. Demo video (2:22): [youtu.be/w1lbPdLEgqI](https://youtu.be/w1lbPdLEgqI).
+Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. Demo video (2:22): [youtu.be/w1lbPdLEgqI](https://youtu.be/w1lbPdLEgqI).
 
 ## At a glance
 
@@ -16,7 +16,7 @@ Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app]
 | Models | DeepSeek V4.1 Flash and Qwen3.6 35B on NEAR AI Cloud, Gemma 4 26B on Phala. Two of three must agree. |
 | Answer time | 17.5 to 21.1 s from the relayer seeing a question to the answer on Base (requests 10 to 13); about 13 s for a NEAR question |
 | Cost per question | NEAR: 0.01 NEAR fee plus about 0.004 NEAR storage. Base: 0.0001 ETH fee, about 16 Tgas on NEAR, 67k to 107k gas on Base |
-| Tests | NEAR oracle 117, NEAR court 47, NEAR dispute 19, Base 79, relayer and API 241, web 143, MCP 20 |
+| Tests | NEAR oracle 117, NEAR court 47, NEAR dispute 19, Base 79, relayer and API 241, web 152, MCP 20 |
 
 ## Deployed contracts
 
@@ -90,7 +90,13 @@ A case runs on testnet between two agent accounts, `psephex-agent-buyer.testnet`
 3. the court writes the oracle question from both texts (`question_for`), three TEE models answer, NEAR checks two of three;
 4. the appeal window runs; without an appeal anyone calls `finalize` and the stake goes by the verdict.
 
-Agents can run a case themselves through the MCP server in `mcp/` (13 tools: open and answer cases, check a NEAR or x402 payment, verify a verdict, look up an agent's record). `mcp/examples/x402/` settles an x402 payment in wNEAR on NEAR testnet without a facilitator. `mcp/examples/llm-agents/` is an LLM agent on NEAR AI Cloud that drives the MCP server: in case 4 one such agent checked that payment and opened the case, a second one answered it, and the first verified the verdict, with no human in the loop: YES, 3 of 3, stake to the buyer.
+Agents can run a case themselves through the MCP server in `mcp/` (13 tools: open and answer cases, check a NEAR or x402 payment, verify a verdict, look up an agent's record). It is published on npm as [`@unitynodes/psephex-mcp`](https://www.npmjs.com/package/@unitynodes/psephex-mcp) and listed in the MCP Registry as `io.github.UnityNodes/psephex`; in Claude Code:
+
+```bash
+claude mcp add psephex -- npx -y @unitynodes/psephex-mcp
+```
+
+Without `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` it only reads; the stake caps and the other settings are in `mcp/README.md`. `mcp/examples/x402/` settles an x402 payment in wNEAR on NEAR testnet without a facilitator. `mcp/examples/llm-agents/` is an LLM agent on NEAR AI Cloud that drives the MCP server: in case 4 one such agent checked that payment and opened the case, a second one answered it, and the first verified the verdict, with no human in the loop: YES, 3 of 3, stake to the buyer.
 
 ## Try it in the browser
 

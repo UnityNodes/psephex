@@ -110,7 +110,7 @@ export default defineConfig(({ command, mode }) => {
       ],
     },
     build: { target: "es2022", sourcemap: false },
-    server: { fs: { allow: [".", "../contracts/base/src/examples"] } },
+    server: { fs: { allow: [".", "../contracts/base/src/examples", "../mcp/package.json"] } },
     test: {
       environment: "jsdom",
       include: ["test/**/*.test.{ts,tsx}"],

@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { NEAR_DISPUTE_CONTRACT, NEAR_ORACLE_CONTRACT } from "../deployment.js";
+import { ownerChangesFrom } from "../lib/owner.js";
 import type { CaseInfo } from "../lib/steps.js";
 import { NearRpcError, useNearRpc } from "./rpc.js";
 
 const CASE_POLL_MS = 4_000;
+const OWNER_CHANGES_POLL_MS = 60_000;
 const NS_PER_SECOND = 1_000_000_000n;
 
 export interface NearCase {
@@ -65,4 +67,16 @@ export function useNearQuestionHash(id: number, enabled: boolean): string | unde
 
 export function useNearAsker(id: number, enabled: boolean): string | undefined {
   return useNearRequest(id, enabled).data?.asker;
+}
+
+export function useOwnerChanges() {
+  const rpc = useNearRpc();
+  return useQuery({
+    queryKey: ["near", "owner-changes"],
+    queryFn: async () => {
+      const [delay, proposals] = await Promise.all([rpc.view<unknown>(NEAR_ORACLE_CONTRACT, "owner_delay_seconds", {}), rpc.view<unknown>(NEAR_ORACLE_CONTRACT, "proposals", {})]);
+      return ownerChangesFrom(delay, proposals);
+    },
+    refetchInterval: OWNER_CHANGES_POLL_MS,
+  });
 }

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
@@ -6,6 +8,7 @@ import { createApi, type Api } from "../src/api.js";
 import { optionalHttpsUrl } from "../src/deployment.js";
 import { ThemeProvider } from "../src/components/theme-provider.js";
 import { ApiProvider } from "../src/hooks.js";
+import { MCP_TOOL_GROUPS } from "../src/lib/mcp.js";
 import { Landing } from "../src/pages/Landing.js";
 import { evidence } from "./fixtures.js";
 
@@ -114,5 +117,22 @@ describe("optionalHttpsUrl", () => {
     expect(optionalHttpsUrl("")).toBeNull();
     expect(optionalHttpsUrl("javascript:alert(1)")).toBeNull();
     expect(optionalHttpsUrl("http://github.com/x")).toBeNull();
+  });
+});
+
+describe("For agents", () => {
+  it("gives the install command for the published MCP package", () => {
+    renderLanding(LIVE);
+    const section = screen.getByRole("region", { name: "Give your agent a court" });
+    expect(within(section).getByText("claude mcp add psephex -- npx -y @unitynodes/psephex-mcp")).toBeInTheDocument();
+    expect(within(section).getByRole("link", { name: "Package on npm" })).toHaveAttribute("href", "https://www.npmjs.com/package/@unitynodes/psephex-mcp");
+    expect(within(section).getByText("io.github.UnityNodes/psephex")).toBeInTheDocument();
+  });
+
+  it("lists exactly the tools the MCP server registers", () => {
+    const source = readFileSync(resolve(import.meta.dirname, "../../mcp/src/server.ts"), "utf8");
+    const registered = [...source.matchAll(/registerTool\(\s*"([a-z_]+)"/g)].map((m) => m[1]).sort();
+    expect(MCP_TOOL_GROUPS.flatMap((g) => g.tools).sort()).toEqual(registered);
+    expect(registered).toHaveLength(13);
   });
 });

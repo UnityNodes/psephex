@@ -12,17 +12,27 @@ import { attestationUrl, explorer, httpUrl } from "../src/deployment.js";
 import { displayText } from "../src/lib/dispute.js";
 import { ApiProvider } from "../src/hooks.js";
 import { ballots, deriveProgress } from "../src/lib/steps.js";
-import { ModelEntry, ModelsPage } from "../src/pages/ModelsPage.js";
+import { ModelEntry, ModelsPage, OwnerChanges } from "../src/pages/ModelsPage.js";
+import { NearRpcProvider, type NearRpc } from "../src/near/rpc.js";
+import { fakeNearRpc } from "./near-fakes.js";
 import { RecentDisputes } from "../src/pages/RecentDisputes.js";
 import { dataOf, evidence } from "./fixtures.js";
 
-function withProviders(api: Api, node: ReactNode) {
+const ORACLE = "oracle.psephex.testnet";
+
+function ownerRpc(proposals: unknown[] = []): NearRpc {
+  return fakeNearRpc({ [`${ORACLE}.owner_delay_seconds`]: "86400", [`${ORACLE}.proposals`]: proposals });
+}
+
+function withProviders(api: Api, node: ReactNode, rpc: NearRpc = ownerRpc()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <ApiProvider value={api}>
-      <QueryClientProvider client={client}>
-        <MemoryRouter>{node}</MemoryRouter>
-      </QueryClientProvider>
+      <NearRpcProvider value={rpc}>
+        <QueryClientProvider client={client}>
+          <MemoryRouter>{node}</MemoryRouter>
+        </QueryClientProvider>
+      </NearRpcProvider>
     </ApiProvider>
   );
 }
@@ -121,6 +131,24 @@ describe("Models", () => {
     await userEvent.hover(link);
     expect(link.getAttribute("href")).toMatch(/&nonce=[0-9a-f]{64}$/);
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+});
+
+describe("Announced changes", () => {
+  it("says nothing is announced and shows the delay read from the contract", async () => {
+    render(withProviders(fixtureApi(), <OwnerChanges />));
+    expect(await screen.findByText(/Nothing is announced/)).toHaveTextContent("at least 24 hours before it can apply");
+    expect(screen.getByText(/has no access keys/)).toHaveTextContent("only 24 hours later");
+  });
+
+  it("lists an announced upgrade with the time it can apply", async () => {
+    const readyNs = (BigInt(Date.UTC(2099, 0, 2, 9, 30)) * 1_000_000n).toString();
+    const rpc = ownerRpc([
+      { id: 4, action: { kind: "upgrade", code_sha256: "ab".repeat(32), migrate_args: "{}" }, proposed_at_ns: "1", ready_at_ns: readyNs, expires_at_ns: readyNs, ready: false, expired: false },
+    ]);
+    render(withProviders(fixtureApi(), <OwnerChanges />, rpc));
+    expect(await screen.findByText(`Replace the oracle code with sha256 ${"ab".repeat(32)}, then run migrate with {}`)).toBeInTheDocument();
+    expect(screen.getByText(/Announcement 4\./)).toHaveTextContent("Can apply from 2 Jan 2099, 09:30 UTC.");
   });
 });
 
