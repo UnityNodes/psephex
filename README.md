@@ -1,12 +1,39 @@
-# Psephex
+<p align="center">
+  <a href="https://psephex.xyz"><img src=".github/readme/banner.svg" alt="Psephex. AI agents need a judge. Both sides file evidence, three models answer in TEEs, NEAR checks two of three and pays out." width="100%"></a>
+</p>
+
+<p align="center">
+  <a href="https://psephex.xyz/app"><img alt="Try it on testnet" src="https://img.shields.io/badge/TRY_IT-Testnet-0b0b0c?style=for-the-badge&labelColor=c8924a"></a>
+  <a href="https://docs.psephex.xyz"><img alt="Docs" src="https://img.shields.io/badge/DOCS-docs.psephex.xyz-0b0b0c?style=for-the-badge&labelColor=c8924a&logo=readthedocs&logoColor=white"></a>
+  <a href="https://youtu.be/kYzTd7s_mTk"><img alt="Demo video, 2:53" src="https://img.shields.io/badge/DEMO-2:53-0b0b0c?style=for-the-badge&labelColor=c8924a&logo=youtube&logoColor=white"></a>
+  <a href="https://www.npmjs.com/package/@unitynodes/psephex-mcp"><img alt="MCP server on npm" src="https://img.shields.io/badge/MCP-npx_@unitynodes/psephex--mcp-0b0b0c?style=for-the-badge&labelColor=c8924a&logo=npm&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/UnityNodes/psephex/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/UnityNodes/psephex/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://www.npmjs.com/package/@unitynodes/psephex-mcp"><img alt="npm version" src="https://img.shields.io/npm/v/@unitynodes/psephex-mcp?color=c8924a&label=npm"></a>
+  <img alt="MCP Registry io.github.UnityNodes/psephex" src="https://img.shields.io/badge/MCP_Registry-io.github.UnityNodes%2Fpsephex-c8924a">
+  <img alt="NEAR testnet, Base Sepolia, Arbitrum Sepolia" src="https://img.shields.io/badge/network-NEAR_testnet_·_Base_·_Arbitrum_Sepolia-c8924a">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-c8924a"></a>
+</p>
 
 Psephex is a judge for deals between AI agents, running on NEAR. An agent that ordered work and an agent that delivered it both put their evidence on the record in a NEAR court contract; three AI models answer the court's question inside TEEs and sign their answers; the NEAR oracle contract checks every signature and requires two matching answers; the court pays out by the verdict, and either side can appeal to a human arbiter within a window.
 
 Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with a NEAR deposit and get `on_answer` back. EVM chains get the same verdict through NEAR Chain Signatures: the NEAR contract signs the transaction that delivers it to Base Sepolia or Arbitrum Sepolia, with no bridge and no oracle key on a server.
 
-The problem it solves: agents (and the contracts they use) increasingly pay each other for work, and someone has to decide whether the work was done. Today that means trusting one operator's server and one model, and letting whoever writes the question decide the answer. In Psephex both sides write their own evidence, the court contract writes the question, the model answers are attestable, the 2-of-3 rule is enforced on chain, a wrong verdict can be appealed, and every verdict since the current model set (all NEAR requests, Base 11 and later, Arbitrum 1) can be re-checked by anyone with two CLI commands.
+> [!TIP]
+> Agents pay each other for work, and someone has to decide whether the work was done. Today that means trusting one operator's server and one model, and letting whoever writes the question decide the answer. In Psephex both sides write their own evidence, the court contract writes the question, the model answers are attestable, the 2-of-3 rule is enforced on chain, a wrong verdict can be appealed, and every verdict since the current model set (all NEAR requests, Base 11 and later, Arbitrum 1) can be re-checked by anyone with two CLI commands.
 
-Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. Demo video (2:53): [youtu.be/kYzTd7s_mTk](https://youtu.be/kYzTd7s_mTk).
+## How a case runs
+
+<p align="center">
+  <img src=".github/readme/flow.svg" alt="How a case runs: 1 open a case with claim, evidence and stake; 2 the other side answers; 3 three models answer in TEEs and sign; 4 NEAR checks two of three signatures; 5 the court pays out, or a party appeals to an arbiter. Base and Arbitrum get the same verdict through NEAR Chain Signatures." width="100%">
+</p>
+
+<p align="center">
+  <a href="https://youtu.be/kYzTd7s_mTk"><img src=".github/readme/demo.jpg" alt="Watch the 2:53 demo on YouTube: two LLM agents settle an x402 payment and take the dispute to the Psephex court on NEAR testnet" width="72%"></a>
+  <br><sub>Two LLM agents settle a real x402 payment and take the dispute to court on their own. <a href="https://youtu.be/kYzTd7s_mTk">Watch the 2:53 demo</a>.</sub>
+</p>
 
 ## At a glance
 
@@ -14,9 +41,18 @@ Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app]
 |---|---|
 | Ask from | NEAR testnet (pay in NEAR), Base Sepolia 84532 and Arbitrum Sepolia 421614 (pay in ETH). Testnet only. |
 | Models | DeepSeek V4.1 Flash and Qwen3.6 35B on NEAR AI Cloud, Gemma 4 26B on Phala. Two of three must agree. |
+| Live | [psephex.xyz](https://psephex.xyz) (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. |
 | Answer time | 17.5 to 21.1 s from the relayer seeing a question to the answer on Base (requests 10 to 13); about 9 s for a NEAR question (8.1 to 9.4 s, NEAR requests 1 to 6) |
 | Cost per question | NEAR: 0.01 NEAR fee plus 0.003 to 0.023 NEAR storage, by question length. Base: 0.0001 ETH fee, about 16 Tgas on NEAR, 67k to 107k gas on Base with a dispute callback |
-| Tests | NEAR oracle 161, NEAR court 47, NEAR dispute 19, Base 79, relayer and API 241, web 152, MCP 20 |
+| Tests | NEAR oracle 161, NEAR court 47, NEAR dispute 19, Base 79, relayer and API 241, web 163, MCP 23 |
+
+## Use it three ways
+
+| | Who it is for | Start here |
+|---|---|---|
+| **An agent on the court** | Claude, Cursor or any MCP client that buys or sells work | `claude mcp add psephex -- npx -y @unitynodes/psephex-mcp`, then [the agent quickstart](https://docs.psephex.xyz/guide/agents) |
+| **A NEAR contract** | Any contract that needs a yes or no it can trust | `ask` with `ask_deposit(question)` attached and `on_answer(request_id, answer)`, see [Ask from a NEAR contract](https://docs.psephex.xyz/build/near-contract) |
+| **A Base or Arbitrum contract** | Solidity apps that want the same verdict | `ask` on AiOracle with the fee and `onAnswer`, see [Ask from Base or Arbitrum](https://docs.psephex.xyz/build/evm) |
 
 ## Deployed contracts
 
@@ -37,7 +73,8 @@ The oracle address `0x3A91…e35F` is the same on every EVM chain: one NEAR acco
 
 ## Check a real answer yourself, without our servers
 
-You need `near` (near-cli-rs), `cast` (Foundry) and `jq`.
+> [!NOTE]
+> You need `near` (near-cli-rs), `cast` (Foundry) and `jq`. The API only hands over the arguments; every check below runs on the NEAR contract or the EVM chain.
 
 **A question asked from NEAR.** Dispute 1 on `dispute.psephex.testnet` asked whether a logo delivered as a 1024x1024 PNG met a contract for at least 512x512; NEAR request 1 holds the verdict.
 
@@ -102,7 +139,7 @@ Agents can run a case themselves through the MCP server in `mcp/` (13 tools: ope
 claude mcp add psephex -- npx -y @unitynodes/psephex-mcp
 ```
 
-Without `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` it only reads; the stake caps and the other settings are in `mcp/README.md`. `mcp/examples/x402/` settles an x402 payment in wNEAR on NEAR testnet without a facilitator. `mcp/examples/llm-agents/` is an LLM agent on NEAR AI Cloud that drives the MCP server: in case 4 one such agent checked that payment and opened the case, a second one answered it, and the first verified the verdict, with no human in the loop: YES, 3 of 3, stake to the buyer.
+Without `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` it only reads; the stake caps and the other settings are in [`mcp/README.md`](mcp/README.md). `mcp/examples/x402/` settles an x402 payment in wNEAR on NEAR testnet without a facilitator. `mcp/examples/llm-agents/` is an LLM agent on NEAR AI Cloud that drives the MCP server: in case 4 one such agent checked that payment and opened the case, a second one answered it, and the first verified the verdict, with no human in the loop: YES, 3 of 3, stake to the buyer.
 
 ## Try it in the browser
 
@@ -118,6 +155,9 @@ The escrow examples were run ten times on every model before they went on the fo
 
 ## How it works
 
+<details>
+<summary><b>The five steps from a question to a payout</b>, with the exact checks at each one</summary>
+
 1. **The question is recorded.** From NEAR, a person or contract calls `oracle.psephex.testnet.ask(question, callback)` with a NEAR deposit; the contract stores the question and emits `asked`. From Base, a contract calls `AiOracle.ask(question)` with the fee; Base stores the question hash and emits `Asked`.
 2. **Three models answer in TEEs.** The relayer asks the NEAR contract to build the exact request (temperature 0, fixed seed, the request id and the source inside the prompt: the NEAR contract account, or the AiOracle address and EVM chain id) and sends those bytes to each model. NEAR AI models sign `model:sha256(request):sha256(response)` with their own key; on Phala the attested Dstack gateway signs `sha256(request):sha256(response)`.
 3. **NEAR checks two of three.** `fulfill_on_near` or `fulfill_on_evm` rebuilds the request, verifies every signature against the keys registered on NEAR and needs two matching answers. For a NEAR question it takes the question from its own state, so the relayer cannot change it.
@@ -126,9 +166,12 @@ The escrow examples were run ten times on every model before they went on the fo
 
 The relayer (`relayer/`) is a crash-safe state machine over SQLite: killed with `kill -9` between steps it resumes without signing twice. The read-only API (`relayer/src/api/`) runs as a separate process with no keys.
 
+</details>
+
 ## What a verdict proves, and what it does not
 
-Proves:
+### ✅ Proves
+
 - Each answer was signed inside a TEE by a key registered on NEAR and attested with a fresh nonce: the model's own key on NEAR AI, the gateway's key on Phala.
 - At least two of the three signed answers agree, checked by the NEAR contract, not by our server.
 - The models saw the request the NEAR contract built from the question asked on NEAR or on Base.
@@ -137,7 +180,8 @@ Proves:
 - The court's code cannot change: `psephex-court.testnet` has no access keys since its deploy.
 - The oracle's rules cannot change under a case. Since 10 November `oracle.psephex.testnet` has no access keys, and a new model key, EVM target, reset of a settled request, higher gas cap or new code is announced on chain with `propose` and runs only 24 hours later, within a seven-day window. New code runs only if its sha256 was announced.
 
-Does not prove:
+### ❌ Does not prove
+
 - That the answer is right. In Base request 2 all three models said 9 is a prime number, and the oracle delivered that.
 - That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.
 - Fully independent operators. Two models run on NEAR AI and one on Phala; on Phala one attested gateway signs for the model it routes to.
@@ -150,6 +194,9 @@ Does not prove:
 Intel's DCAP signature chain on the TDX quotes was not verified by us; we checked that each quote's report data holds the signing key and our nonce.
 
 ## Run it yourself
+
+<details>
+<summary><b>Every test suite, the wasm rebuild and what each service needs</b></summary>
 
 From the repository root:
 
@@ -183,18 +230,20 @@ The deployed oracle wasm (sha256 `0f390e19…`) rebuilds from this tree with car
 
 The relayer needs a NEAR function-call key, a NEAR AI key and a Phala (RedPill) key; the API needs none. Their variables are listed in `.env.example` and read in `relayer/src/config.ts`. The relayer runs with `node relayer/dist/main.js`, the API with `node relayer/dist/api/main.js`; the dashboard build needs `VITE_API_URL` and the fonts from `scripts/fetch-fonts.sh`.
 
+</details>
+
 ## Repository
 
-```
-contracts/near   NEAR oracle contract (Rust, near-sdk)
-contracts/near-court     NEAR court for agent deals: both sides' evidence, appeal, arbiter
-contracts/near-dispute   NEAR one-sided escrow example (v1)
-contracts/base   AiOracle, Dispute and the YesNoClient example (Solidity, Foundry)
-relayer          relayer state machine and the read-only API (TypeScript)
-web              landing and dashboard (Vite, React, wagmi)
-mcp              MCP server for agents, with the x402 and LLM agent examples
-docs-site        documentation at docs.psephex.xyz (VitePress)
-```
+| Folder | What it is |
+|---|---|
+| [`contracts/near`](contracts/near) | NEAR oracle contract: 2-of-3 signature check, Chain Signatures for EVM, owner timelock (Rust, near-sdk) |
+| [`contracts/near-court`](contracts/near-court) | NEAR court for agent deals: both sides' evidence, appeal, arbiter |
+| [`contracts/near-dispute`](contracts/near-dispute) | NEAR one-sided escrow example (v1) |
+| [`contracts/base`](contracts/base) | AiOracle, Dispute and the YesNoClient example (Solidity, Foundry) |
+| [`relayer`](relayer) | Relayer state machine and the read-only API (TypeScript) |
+| [`web`](web) | Landing and dashboard (Vite, React, wagmi) |
+| [`mcp`](mcp) | MCP server for agents, with the x402 and LLM agent examples |
+| [`docs-site`](docs-site) | Documentation at docs.psephex.xyz (VitePress) |
 
 ## Built during the hackathon, libraries and AI
 
@@ -206,7 +255,7 @@ AI assistance: the code, tests and documentation in this repository were written
 
 ## Tracks
 
-Open, Agents and Security: an open primitive on NEAR that also serves EVM chains, AI models acting as verifiable judges for contracts, and a design whose trust rests on TEE attestation, a 2-of-3 rule enforced on chain and MPC signing instead of a server key.
+Agent Economy, AI Security & Defense and Open Innovation: an open primitive on NEAR that also serves EVM chains, AI models acting as verifiable judges for contracts, and a design whose trust rests on TEE attestation, a 2-of-3 rule enforced on chain and MPC signing instead of a server key.
 
 ## Other project by the author
 
