@@ -1,5 +1,5 @@
 {
-  "name": "psephex-mcp",
+  "name": "@unitynodes/psephex-mcp",
   "version": "0.1.0",
   "mcpName": "io.github.UnityNodes/psephex",
   "description": "MCP server that lets an AI agent use the Psephex court on NEAR: open and answer cases, check payments, verdicts and reputation",
