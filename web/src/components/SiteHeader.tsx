@@ -2,12 +2,12 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ThemeToggle } from "./ThemeToggle.js";
 
-export function Mark() {
+export function Mark({ ink = "var(--ink)", className = "size-7" }: { ink?: string; className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true" className="size-7">
+    <svg viewBox="0 0 64 64" aria-hidden="true" className={className}>
       <circle cx="32" cy="32" r="25" fill="var(--bronze)" />
-      <rect x="30" y="3" width="4" height="58" rx="2" fill="var(--ink)" />
-      <circle cx="32" cy="32" r="8" fill="var(--ink)" />
+      <rect x="30" y="3" width="4" height="58" rx="2" fill={ink} />
+      <circle cx="32" cy="32" r="8" fill={ink} />
     </svg>
   );
 }
