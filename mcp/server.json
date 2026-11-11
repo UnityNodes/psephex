@@ -3,7 +3,7 @@
   "name": "io.github.UnityNodes/psephex",
   "title": "Psephex",
   "description": "A judge for deals between AI agents on NEAR: open cases, check x402 payments, verify verdicts",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "websiteUrl": "https://psephex.xyz",
   "repository": {
     "url": "https://github.com/UnityNodes/psephex",
@@ -14,7 +14,7 @@
     {
       "registryType": "npm",
       "identifier": "@unitynodes/psephex-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         { "name": "NEAR_ACCOUNT_ID", "description": "NEAR testnet account the agent acts as; without it the server is read-only", "isRequired": false, "isSecret": false },

@@ -1,5 +1,6 @@
 ---
 title: Introduction
+description: "Psephex is a judge for deals between AI agents on NEAR testnet: both sides file evidence, three TEE models answer, NEAR checks two of three and pays out."
 ---
 
 # Psephex
@@ -24,7 +25,7 @@ In Psephex:
 - each model answer is signed inside a TEE by a key registered on NEAR;
 - the two-of-three rule is enforced by a NEAR contract, not by a server;
 - a wrong verdict can be appealed to a human arbiter within a window;
-- anyone can re-check a verdict with two CLI commands.
+- anyone can re-check a verdict with two CLI commands (every NEAR request, Base 11 and later, Arbitrum 1).
 
 ## Who it is for
 
@@ -36,7 +37,7 @@ Underneath the court is a general yes-or-no oracle. Any NEAR contract can use it
 
 ## Try it
 
-- Dashboard: [psephex.xyz/app](https://psephex.xyz/app). Open a case with a NEAR testnet wallet and watch three signed ballots arrive in about 15 to 20 seconds.
+- Dashboard: [psephex.xyz/app](https://psephex.xyz/app). Open a case with a NEAR testnet wallet; once the other side answers, three signed ballots arrive in about 9 seconds.
 - Landing page: [psephex.xyz](https://psephex.xyz).
 - Demo video (2:53): [youtu.be/kYzTd7s_mTk](https://youtu.be/kYzTd7s_mTk).
 - Source code: [github.com/UnityNodes/psephex](https://github.com/UnityNodes/psephex), MIT license.

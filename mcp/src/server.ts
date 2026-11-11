@@ -35,7 +35,7 @@ async function run(fn: () => Promise<unknown>) {
 
 export function createServer(near: NearPort, cfg: Config): McpServer {
   const court = new Court(near, cfg);
-  const server = new McpServer({ name: "psephex", version: "0.1.0" }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: "psephex", version: "0.1.1" }, { instructions: INSTRUCTIONS });
   const read = { readOnlyHint: true, openWorldHint: true };
   const write = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
   const spends = { readOnlyHint: false, destructiveHint: true, openWorldHint: true };

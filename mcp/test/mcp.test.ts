@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatNear, loadConfig, parseNear } from "../src/config.js";
 import { Court, reputationOf, type Case } from "../src/court.js";
 import { decodeOutcome } from "../src/near.js";
@@ -202,5 +203,34 @@ describe("transaction outcomes", () => {
     const out = decodeOutcome({ transaction: { hash: "H" }, status: { SuccessValue: Buffer.from("7").toString("base64") }, receipts_outcome: [{ outcome: { logs: ["a"] } }, { outcome: { logs: ["b"] } }] });
     expect(out).toEqual({ txHash: "H", value: 7, logs: ["a", "b"] });
     expect(() => decodeOutcome({ status: { Failure: { ActionError: "x" } } })).toThrow(/failed/);
+  });
+});
+
+describe("verify_verdict", () => {
+  const QUESTION = "Was the work delivered?";
+  const apiArgs = (question: string) => ({ data: { near: { args: { chain: "near:testnet", request_id: 6, question, answers: [] } } } });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function withApi(question: string) {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(apiArgs(question)), { status: 200 })));
+    const { near, court: c } = court({});
+    near.views.set("oracle.psephex.testnet.near_request", { request_id: 6, question: QUESTION, answer: "YES" });
+    near.views.set("oracle.psephex.testnet.verify_consensus", { ok: true, answer: "YES", reason: "", required: 2, votes: [] });
+    return c;
+  }
+
+  it("re-checks the signatures on NEAR and compares the stored verdict", async () => {
+    await expect(withApi(QUESTION).verifyVerdict(6)).resolves.toMatchObject({ signatures_ok: true, stored_answer: "YES", matches: true });
+  });
+
+  it("refuses signatures over a question the API swapped in", async () => {
+    await expect(withApi("Is the sky green?").verifyVerdict(6)).rejects.toThrow(/different question/);
+  });
+
+  it("reports the same version as the published package", () => {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
+    const server = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+    expect(server).toContain(`version: "${pkg.version}"`);
+    expect(JSON.parse(readFileSync(new URL("../server.json", import.meta.url), "utf8"))).toMatchObject({ version: pkg.version, packages: [{ version: pkg.version }] });
   });
 });

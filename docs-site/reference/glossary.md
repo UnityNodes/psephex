@@ -1,3 +1,7 @@
+---
+description: "The terms used across Psephex: case, request, verdict, appeal, TEE, Chain Signatures and more."
+---
+
 # Glossary
 
 **Appeal bond.** The amount a party attaches to appeal a decided case, 0.02 NEAR on testnet today. The arbiter's winner gets it; if the arbiter does not rule in time, it goes back to the appellant.

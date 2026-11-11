@@ -14,13 +14,13 @@ export function Mark({ ink = "var(--ink)", className = "size-7" }: { ink?: strin
 
 export function SiteHeader({ children, end }: { children: ReactNode; end?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-center gap-x-8 gap-y-1 py-5">
-      <Link to="/" className="flex min-h-11 items-center gap-2.5 font-display text-2xl font-extrabold">
+    <header className="flex items-center gap-x-8 py-5">
+      <Link to="/" className="flex min-h-11 shrink-0 items-center gap-2.5 font-display text-2xl font-extrabold">
         <Mark />
         Psephex
       </Link>
-      <div className="order-last w-full sm:order-none sm:w-auto">{children}</div>
-      <div className="ml-auto flex items-center gap-2">
+      {children}
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         {end}
         <ThemeToggle />
       </div>

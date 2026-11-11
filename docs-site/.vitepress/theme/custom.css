@@ -220,3 +220,7 @@ html:not(.dark) .vp-doc [class*="language-"] .shiki span {
   font-size: 1rem;
   color: var(--ink);
 }
+
+.vp-doc td code {
+  white-space: nowrap;
+}

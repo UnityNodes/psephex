@@ -37,7 +37,7 @@ describe("MetricsStrip", () => {
     renderStrip({ "/stats": evidence("stats.json"), "/health": evidence("health.json") });
     const strip = screen.getByRole("region", { name: "Live numbers" });
     expect(await within(strip).findByRole("img", { name: "3 YES, 1 NO and 1 UNKNOWN" })).toBeInTheDocument();
-    expect(strip).toHaveTextContent(/5 answered, 2 stopped/);
+    expect(strip).toHaveTextContent(/5 answered, 1 stopped, 1 rejected/);
     expect(strip).toHaveTextContent(/346 s/);
     expect(await within(strip).findByText("Running")).toBeInTheDocument();
     expect(strip).toHaveTextContent(/0 of 300 model calls today/);

@@ -1,3 +1,7 @@
+---
+description: "Re-check a Psephex verdict yourself with near and cast, without trusting our servers."
+---
+
 # Verify a verdict yourself
 
 You do not have to trust our servers or this page. These commands re-check real verdicts on the NEAR contract and on Base Sepolia. The API only hands over the arguments; the check itself runs on chain.
@@ -27,6 +31,12 @@ near contract call-function as-read-only oracle.psephex.testnet verify_consensus
 ```
 
 Expect `"ok": true` and `"answer": "YES"`. The NEAR contract rebuilt the request for `near:testnet`, checked each model's signature against the keys registered on NEAR, and found two of three matching.
+
+The signatures only mean something for the question NEAR stored, so check that the API handed over that question:
+
+```bash
+diff <(jq -r .question verify-near-1.json) <(near contract call-function as-read-only oracle.psephex.testnet near_request json-args '{"request_id":1}' network-config testnet now | jq -r .question) && echo same question
+```
 
 ## A question asked from Base
 
@@ -83,7 +93,7 @@ near contract call-function as-read-only oracle.psephex.testnet proposals json-a
 near contract call-function as-read-only oracle.psephex.testnet owner_delay_seconds json-args {} network-config testnet now
 ```
 
-Expect no keys, the open proposals with the time each may run (`ready_at_ns`), and `"86400"`. See [owner timelock](/trust/owner-timelock) for what this covers.
+Expect no keys, `[]` or the open proposals with the time each may run (`ready_at_ns`), and `"86400"`. See [owner timelock](/trust/owner-timelock) for what this covers.
 
 ## Fetch a fresh TEE attestation
 

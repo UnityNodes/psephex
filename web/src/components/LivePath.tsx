@@ -5,7 +5,8 @@ import { Link } from "react-router";
 import type { Answer, RequestDetail } from "../api.js";
 import { explorer, NEAR_ORACLE_CONTRACT, ORACLE_EVM_ADDRESS } from "../deployment.js";
 import { ballots, modelLabel, type Ballot } from "../lib/ballots.js";
-import { displayText } from "../lib/text.js";
+import { requestHeadline } from "../lib/court.js";
+import { requestName } from "../lib/status.js";
 import { SOURCE_NAME, SOURCE_SHORT } from "../sources.js";
 import { BallotDisc } from "./Ballots.js";
 import { BorderBeam } from "./ui/border-beam.js";
@@ -105,14 +106,14 @@ export function LivePath({ detail }: { detail: RequestDetail | null }) {
         </h2>
         {detail && (
           <Link to={`/app/r/${detail.source}/${detail.id}`} className="text-sm font-medium text-bronze-text underline underline-offset-4 hover:text-ink">
-            See how dispute #{detail.id} was decided
+            See how {requestName(detail.source, detail.id)} was decided
           </Link>
         )}
       </div>
       <ol key={detail ? `${detail.source}-${detail.id}` : "empty"} className={`relative m-0 grid list-none gap-8 p-0 xl:gap-6 ${evm ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
         <Track />
         <Node index={0} icon={<Box className="size-4" aria-hidden="true" />} where={SOURCE_NAME[source]} title="Question asked">
-          <p className="m-0 line-clamp-4 text-ink break-words">{detail ? displayText(detail.question) : "Waiting for the first answered dispute."}</p>
+          <p className="m-0 line-clamp-4 text-ink break-words">{detail ? requestHeadline(detail) : "Waiting for the first answered request."}</p>
           {!detail && (
             <p className="m-0">
               <code className="font-mono text-xs text-ink">ask</code> with a NEAR deposit on {NEAR_ORACLE_CONTRACT}.

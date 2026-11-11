@@ -7,6 +7,8 @@ import { ThemeToggle } from "../components/ThemeToggle.js";
 import { Button } from "../components/ui/button.js";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../components/ui/sheet.js";
 import { NearAccount } from "../components/NearAccount.js";
+import { MAIN_ID, SkipLink } from "../components/SkipLink.js";
+import { OVERVIEW_TITLE } from "../lib/status.js";
 import { NetworkStatus } from "./NetworkStatus.js";
 
 const ITEM = ({ isActive }: { isActive: boolean }) =>
@@ -23,16 +25,16 @@ function Brand() {
 
 function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex min-h-full flex-col gap-6">
       <Brand />
       <nav aria-label="Main" className="flex flex-col gap-1">
         <NavLink to="/app" end className={ITEM} onClick={onNavigate}>
           <Scale className="size-4" aria-hidden="true" />
-          Disputes
+          {OVERVIEW_TITLE}
         </NavLink>
         <NavLink to="/app/new" className={ITEM} onClick={onNavigate}>
           <Plus className="size-4" aria-hidden="true" />
-          Open a dispute
+          Open a case
         </NavLink>
         <NavLink to="/app/models" className={ITEM} onClick={onNavigate}>
           <Cpu className="size-4" aria-hidden="true" />
@@ -67,7 +69,7 @@ function MobileMenu() {
           <Menu className="size-5" aria-hidden="true" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-72 border-line bg-paper p-4">
+      <SheetContent side="left" className="w-72 overflow-y-auto border-line bg-paper p-4">
         <SheetTitle className="sr-only">Menu</SheetTitle>
         <SheetDescription className="sr-only">Pages of the Psephex dashboard</SheetDescription>
         <SidebarBody onNavigate={() => setOpen(false)} />
@@ -79,7 +81,8 @@ function MobileMenu() {
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-dvh border-r border-line bg-paper p-4 lg:block">
+      <SkipLink />
+      <aside className="sticky top-0 hidden h-dvh overflow-y-auto overscroll-contain border-r border-line bg-paper p-4 lg:block">
         <SidebarBody />
       </aside>
       <div className="flex min-w-0 flex-col">
@@ -93,7 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NearAccount />
           </div>
         </header>
-        <main className="flex-1 px-4 py-8 sm:px-8 lg:py-10">{children}</main>
+        <main id={MAIN_ID} tabIndex={-1} className="flex-1 scroll-mt-20 px-4 py-8 outline-none sm:px-8 lg:py-10">{children}</main>
       </div>
     </div>
   );

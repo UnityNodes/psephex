@@ -173,11 +173,15 @@ describe("App", () => {
   it("opens the landing at the root and the dashboard under /app", async () => {
     const landing = setup(APP, "/");
     expect(await landing.findByRole("heading", { level: 1, name: /A judge for deals between AI agents/ })).toBeInTheDocument();
+    expect(landing.getByRole("link", { name: "Skip to content" })).toHaveAttribute("href", "#main");
+    expect(landing.getByRole("main")).toHaveAttribute("id", "main");
     landing.unmount();
     const dashboard = setup(APP, "/app");
-    expect(await dashboard.findByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();
+    expect(await dashboard.findByRole("heading", { level: 1, name: "Cases and requests" })).toBeInTheDocument();
     expect(dashboard.getByRole("region", { name: "Live numbers" })).toBeInTheDocument();
-    expect(dashboard.getAllByRole("link", { name: /New dispute/ })[0]).toHaveAttribute("href", "/app/new");
+    expect(dashboard.getByRole("link", { name: "Skip to content" })).toHaveAttribute("href", "#main");
+    expect(dashboard.getByRole("main")).toHaveAttribute("id", "main");
+    expect(dashboard.getAllByRole("link", { name: /New case/ })[0]).toHaveAttribute("href", "/app/new");
     expect(dashboard.getByRole("link", { name: /oracle\.psephex\.testnet on Nearblocks/ })).toHaveAttribute("rel", "noopener noreferrer");
   });
 
@@ -186,35 +190,37 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "This page does not exist" })).toBeInTheDocument();
   });
 
-  it("opens the new dispute form in a dialog and closes it back to the list", async () => {
+  it("opens the new case form in a dialog and closes it back to the list", async () => {
     setup(APP, "/app/new");
-    const dialog = await screen.findByRole("dialog", { name: "Open a dispute" });
+    const dialog = await screen.findByRole("dialog", { name: "Open a case" });
     expect(within(dialog).getByLabelText("Claim")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Your evidence")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByRole("heading", { level: 1, name: "Disputes" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Cases and requests" })).toBeInTheDocument();
+    expect(document.title).toBe("Cases and requests - Psephex");
   });
 
-  it("redirects a legacy /app/r/:id link to the Base dispute", async () => {
+  it("redirects a legacy /app/r/:id link to the Base request", async () => {
     setup(APP, "/app/r/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE } });
-    const sheet = await screen.findByRole("dialog", { name: "Dispute #7" });
+    const sheet = await screen.findByRole("dialog", { name: "Base request #7" });
     expect(await within(sheet).findByRole("heading", { level: 1, name: /Is water made of carbon/ })).toBeInTheDocument();
+    expect(document.title).toBe("Base request #7 - Psephex");
     expect(within(sheet).getByText("Base Sepolia")).toBeInTheDocument();
     expect(within(sheet).getByText("Question recorded on Base")).toBeInTheDocument();
   });
 
-  it("routes to a dispute and to an unknown page", async () => {
+  it("routes to a request and to an unknown page", async () => {
     setup(APP, "/app/r/base/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE } });
-    const sheet = await screen.findByRole("dialog", { name: "Dispute #7" });
-    expect(await within(sheet).findByRole("heading", { name: "The path of this dispute" })).toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: "Base request #7" });
+    expect(await within(sheet).findByRole("heading", { name: "The path of this request" })).toBeInTheDocument();
     const other = setup(APP, "/app/nope");
     expect(await other.findByText(/This page does not exist/)).toBeInTheDocument();
   });
 });
 
 describe("RequestPage", () => {
-  it("shows a settled NO dispute with votes, the full path and the commands", async () => {
+  it("shows a settled NO request with votes, the full path and the commands", async () => {
     setup(<RequestPage />, "/app/r/base/7", { 7: { escalated: false, settled: true, deadline: FAR_FUTURE, winner: COUNTERPARTY as Address } });
     expect(await screen.findByRole("heading", { level: 1, name: /Is water made of carbon/ })).toBeInTheDocument();
     expect(await screen.findByText(/NO\. 0\.001 ETH went to the counterparty 0xBc94…4799/)).toBeInTheDocument();
@@ -225,9 +231,9 @@ describe("RequestPage", () => {
     expect(screen.getByText("This text matches the question hash stored on Base.")).toBeInTheDocument();
   });
 
-  it("offers the refund once a stopped dispute passes its deadline", async () => {
+  it("offers the refund once a stopped request passes its deadline", async () => {
     setup(<RequestPage />, "/app/r/base/5", { 5: { escalated: false, settled: false, deadline: 1n } });
-    expect(await screen.findByText(/The oracle stopped on this dispute: stuck in answering/)).toBeInTheDocument();
+    expect(await screen.findByText(/The oracle stopped on this request: stuck in answering/)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Refund the stake to the claimant" })).toBeInTheDocument();
     expect(screen.getByText("(stopped)")).toBeInTheDocument();
   });
@@ -235,18 +241,18 @@ describe("RequestPage", () => {
   it("hides a question that does not match the hash stored on Base", async () => {
     setup(<RequestPage />, "/app/r/base/5", { 5: { escalated: false, settled: false, deadline: FAR_FUTURE } }, { 5: keccak256(stringToBytes("a different question")) });
     expect(await screen.findByText(/does not match the hash stored on Base/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Dispute #5");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Base request #5");
     expect(screen.queryByRole("heading", { name: "Check it yourself" })).toBeNull();
   });
 
-  it("says when the dispute does not exist yet", async () => {
+  it("says when the request does not exist yet", async () => {
     setup(<RequestPage />, "/app/r/base/42");
-    expect(await screen.findByRole("heading", { level: 1, name: "No dispute with this number yet" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "No request with this number yet" })).toBeInTheDocument();
   });
 
   it("rejects a malformed id", () => {
     setup(<RequestPage />, "/app/r/base/abc");
-    expect(screen.getByText(/There is no dispute with this number/)).toBeInTheDocument();
+    expect(screen.getByText(/There is no request with this number/)).toBeInTheDocument();
   });
 });
 

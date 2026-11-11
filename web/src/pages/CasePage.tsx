@@ -62,13 +62,13 @@ function Countdowns({ items, nowNs }: { items: readonly Deadline[]; nowNs: bigin
   );
 }
 
-function CodeBlock({ title, code }: { title: string; code: string }) {
+function CodeBlock({ title, label, code }: { title: string; label: string; code: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <p className="m-0 text-sm font-medium">{title}</p>
       <div className="flex min-w-0 items-start gap-2 rounded-lg border border-vault-line bg-vault p-3 text-vault-ink">
         <code className="min-w-0 flex-1 font-mono text-xs break-all whitespace-pre-wrap">{code}</code>
-        <CopyButton text={code} />
+        <CopyButton text={code} label={label} />
       </div>
     </div>
   );
@@ -85,7 +85,7 @@ function ArbiterPanel({ c, caseId }: { c: CourtCase; caseId: number }) {
       <p className="m-0 text-muted [overflow-wrap:anywhere]">
         {c.appellant && <AgentLink account={c.appellant} className="text-ink" />} appealed. The arbiter of this appeal is <span className="font-mono text-ink">{arbiter ?? "unknown"}</span>, a person who rules from the NEAR CLI. The winner gets the stake and the bond.
       </p>
-      {commands.map(({ w, cmd }) => (cmd ? <CodeBlock key={w} title={`Rule for the ${w}`} code={cmd} /> : null))}
+      {commands.map(({ w, cmd }) => (cmd ? <CodeBlock key={w} title={`Rule for the ${w}`} label={`the command to rule for the ${w}`} code={cmd} /> : null))}
       {commands.every((x) => x.cmd === null) && <p className="m-0 text-sm text-no">The arbiter account from NEAR is not a valid account id, so no command is shown.</p>}
     </section>
   );
@@ -213,7 +213,7 @@ export function CasePage() {
   const raw = useParams().id ?? "";
   const valid = ID.test(raw);
   const caseId = valid ? Number(raw) : 0;
-  usePageTitle(valid ? `Case #${caseId} - Psephex` : "Not found - Psephex");
+  usePageTitle(valid ? `Case #${caseId} - Psephex` : "Not found - Psephex", valid ? `Court case #${caseId} on NEAR testnet: the claim, both sides' evidence, the verdict of three TEE models and what each side can do next.` : undefined);
   if (!valid) {
     return (
       <p>

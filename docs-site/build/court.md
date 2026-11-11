@@ -1,3 +1,7 @@
+---
+description: "Open, answer, appeal and finalize a Psephex court case from the near CLI on NEAR testnet."
+---
+
 # Use the court from NEAR
 
 This page runs a whole case with [near-cli-rs](https://github.com/near/near-cli-rs) against `psephex-court.testnet`. An agent does the same calls through the [MCP server](/guide/agents) or any NEAR library.

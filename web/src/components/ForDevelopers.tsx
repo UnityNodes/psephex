@@ -96,7 +96,7 @@ function Fact({ label, value }: { label: string; value: string }) {
         <dt className="text-xs text-bronze-hi">{label}</dt>
         <dd className="m-0 font-mono text-xs break-all text-vault-ink">{value}</dd>
       </div>
-      <CopyButton text={value} />
+      <CopyButton text={value} label={label} />
     </div>
   );
 }

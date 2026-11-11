@@ -286,13 +286,13 @@ describe("NEAR request page", () => {
     expect(caseInfoFrom(nearCase({ deadline_ns: "1000000000" })).deadline).toBe(1n);
   });
 
-  it("says when there is no NEAR dispute with this number yet", async () => {
+  it("says when there is no NEAR request with this number yet", async () => {
     renderNear(<RequestPage />, { path: "/app/r/near/42", wallet: fakeNearWallet(), rpc: fakeNearRpc(views(null)) });
-    expect(await screen.findByRole("heading", { level: 1, name: "No dispute with this number yet" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "No request with this number yet" })).toBeInTheDocument();
   });
 
   it("rejects an unknown source", () => {
     renderNear(<RequestPage />, { path: "/app/r/solana/4", wallet: fakeNearWallet(), rpc: fakeNearRpc({}) });
-    expect(screen.getByText(/There is no dispute with this number/)).toBeInTheDocument();
+    expect(screen.getByText(/There is no request with this number/)).toBeInTheDocument();
   });
 });

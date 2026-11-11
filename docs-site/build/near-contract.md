@@ -1,3 +1,7 @@
+---
+description: "Ask the Psephex oracle from a NEAR contract with ask and on_answer, with a Rust example."
+---
+
 # Ask from a NEAR contract
 
 Any NEAR testnet contract can ask `oracle.psephex.testnet` a yes-or-no question and get the verdict back in a callback. The court is one such client.
@@ -29,7 +33,7 @@ near contract call-function as-read-only oracle.psephex.testnet ask_deposit json
 near contract call-function as-transaction oracle.psephex.testnet ask json-args '{"question":"Is 7 a prime number?"}' prepaid-gas '30 Tgas' attached-deposit '0.1 NEAR' sign-as you.testnet network-config testnet sign-with-keychain send
 ```
 
-The first call returns about 0.01344 NEAR for this question. The second keeps that and refunds the rest of the 0.1 NEAR. In about 13 seconds the relayer delivers the verdict. Read it with the request id `ask` returned:
+The first call returns about 0.01344 NEAR for this question. The second keeps that and refunds the rest of the 0.1 NEAR. In about 9 seconds the relayer delivers the verdict. Read it with the request id `ask` returned:
 
 ```bash
 near contract call-function as-read-only oracle.psephex.testnet near_request json-args '{"request_id":1}' network-config testnet now

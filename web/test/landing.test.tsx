@@ -67,7 +67,7 @@ describe("Landing", () => {
     renderLanding(LIVE);
     const limits = screen.getByRole("region", { name: "What a verdict does not prove" });
     expect(limits).toHaveTextContent(/9 is a prime number/);
-    expect(within(limits).getByRole("link", { name: "dispute #2" })).toHaveAttribute("href", "/app/r/base/2");
+    expect(within(limits).getByRole("link", { name: "Base request #2" })).toHaveAttribute("href", "/app/r/base/2");
     expect(limits).toHaveTextContent(/one on Phala/);
     expect(limits).toHaveTextContent(/which is why the court has an appeal/);
     expect(limits).toHaveTextContent(/The arbiter is one person today/);
@@ -78,13 +78,13 @@ describe("Landing", () => {
   it("shows live numbers and the latest verdict from the API", async () => {
     renderLanding(LIVE);
     const numbers = await screen.findByRole("region", { name: "Live on testnet" });
-    await waitFor(() => expect(numbers).toHaveTextContent(/7 disputes/));
+    await waitFor(() => expect(numbers).toHaveTextContent(/7 requests so far/));
     expect(numbers).toHaveTextContent(/5 answered/);
     expect(numbers).toHaveTextContent(/3 YES, 1 NO and 1 UNKNOWN/);
     const latest = await screen.findByRole("region", { name: "Latest verdict" });
     expect(await within(latest).findByText(/Is water made of carbon/)).toBeInTheDocument();
     expect(latest).toHaveTextContent(/3 of 3 signed answers say NO/);
-    expect(within(latest).getByRole("link", { name: "See how dispute #7 was decided" })).toHaveAttribute("href", "/app/r/base/7");
+    expect(within(latest).getByRole("link", { name: "See how Base request #7 was decided" })).toHaveAttribute("href", "/app/r/base/7");
   });
 
   it("still reads when the API is down", async () => {

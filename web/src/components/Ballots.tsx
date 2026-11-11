@@ -47,7 +47,7 @@ export function Ballots({ ballots, verdict, compact = false, stopped = false }: 
         {slots.map((b, i) => (
           <li key={b?.model ?? i} className={`flex flex-col items-center gap-2 text-center ${compact ? "" : "sm:w-28"}`}>
             <BallotDisc vote={b?.vote ?? null} size={compact ? 48 : 64} />
-            <span className={`font-medium break-words ${compact ? "text-xs" : "text-sm"}`}>{b ? shortName(b.model) : "Waiting"}</span>
+            <span className={`font-medium break-words ${compact ? "text-xs" : "text-sm"}`}>{b ? shortName(b.model) : stopped ? "No answer" : "Waiting"}</span>
             <span className="text-xs text-muted">{stopped && !b?.signed ? "not counted" : b?.vote ? `${MEANING[b.vote]}, signed` : b?.signed ? "signed" : "no answer yet"}</span>
           </li>
         ))}

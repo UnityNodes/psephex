@@ -4,7 +4,7 @@ Psephex is a judge for deals between AI agents, running on NEAR. An agent that o
 
 Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with a NEAR deposit and get `on_answer` back. EVM chains get the same verdict through NEAR Chain Signatures: the NEAR contract signs the transaction that delivers it to Base Sepolia or Arbitrum Sepolia, with no bridge and no oracle key on a server.
 
-The problem it solves: agents (and the contracts they use) increasingly pay each other for work, and someone has to decide whether the work was done. Today that means trusting one operator's server and one model, and letting whoever writes the question decide the answer. In Psephex both sides write their own evidence, the court contract writes the question, the model answers are attestable, the 2-of-3 rule is enforced on chain, a wrong verdict can be appealed, and every verdict can be re-checked by anyone with two CLI commands.
+The problem it solves: agents (and the contracts they use) increasingly pay each other for work, and someone has to decide whether the work was done. Today that means trusting one operator's server and one model, and letting whoever writes the question decide the answer. In Psephex both sides write their own evidence, the court contract writes the question, the model answers are attestable, the 2-of-3 rule is enforced on chain, a wrong verdict can be appealed, and every verdict since the current model set (all NEAR requests, Base 11 and later, Arbitrum 1) can be re-checked by anyone with two CLI commands.
 
 Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. Demo video (2:53): [youtu.be/kYzTd7s_mTk](https://youtu.be/kYzTd7s_mTk).
 
@@ -14,9 +14,9 @@ Hosted demo: **[psephex.xyz](https://psephex.xyz)** (landing), [psephex.xyz/app]
 |---|---|
 | Ask from | NEAR testnet (pay in NEAR), Base Sepolia 84532 and Arbitrum Sepolia 421614 (pay in ETH). Testnet only. |
 | Models | DeepSeek V4.1 Flash and Qwen3.6 35B on NEAR AI Cloud, Gemma 4 26B on Phala. Two of three must agree. |
-| Answer time | 17.5 to 21.1 s from the relayer seeing a question to the answer on Base (requests 10 to 13); about 13 s for a NEAR question |
-| Cost per question | NEAR: 0.01 NEAR fee plus about 0.004 NEAR storage. Base: 0.0001 ETH fee, about 16 Tgas on NEAR, 67k to 107k gas on Base |
-| Tests | NEAR oracle 117, NEAR court 47, NEAR dispute 19, Base 79, relayer and API 241, web 152, MCP 20 |
+| Answer time | 17.5 to 21.1 s from the relayer seeing a question to the answer on Base (requests 10 to 13); about 9 s for a NEAR question (8.1 to 9.4 s, NEAR requests 1 to 6) |
+| Cost per question | NEAR: 0.01 NEAR fee plus 0.003 to 0.023 NEAR storage, by question length. Base: 0.0001 ETH fee, about 16 Tgas on NEAR, 67k to 107k gas on Base with a dispute callback |
+| Tests | NEAR oracle 161, NEAR court 47, NEAR dispute 19, Base 79, relayer and API 241, web 152, MCP 20 |
 
 ## Deployed contracts
 
@@ -52,6 +52,12 @@ near contract call-function as-read-only oracle.psephex.testnet verify_consensus
 ```
 Expect `"ok": true` and `"answer": "YES"`: the NEAR contract rebuilt the request for `near:testnet`, checked each model's signature against the keys registered on NEAR, and found two of three matching.
 
+The signatures only mean something for the question NEAR stored, so check that the API handed over that question:
+
+```bash
+diff <(jq -r .question verify-near-1.json) <(near contract call-function as-read-only oracle.psephex.testnet near_request json-args '{"request_id":1}' network-config testnet now | jq -r .question) && echo same question
+```
+
 **A question asked from Base.** Request 11 on Base asked the same question.
 
 ```bash
@@ -80,7 +86,7 @@ near account list-keys oracle.psephex.testnet network-config testnet now
 near contract call-function as-read-only oracle.psephex.testnet proposals json-args {} network-config testnet now
 near contract call-function as-read-only oracle.psephex.testnet owner_delay_seconds json-args {} network-config testnet now
 ```
-Expect no keys, the open proposals with the time each may run (`ready_at_ns`), and `"86400"`. Every proposal also logs an `owner_change_proposed` event.
+Expect no keys, `[]` or the open proposals with the time each may run (`ready_at_ns`), and `"86400"`. Every proposal also logs an `owner_change_proposed` event.
 
 ## Two agents settle a deal
 
@@ -102,12 +108,13 @@ Without `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY` it only reads; the stake caps a
 
 The dashboard at [psephex.xyz/app](https://psephex.xyz/app) (source in `web/`) is what a judge with a fresh wallet used in our end-to-end test:
 
-1. Open [psephex.xyz/app](https://psephex.xyz/app) and open a dispute. NEAR testnet is the default: connect a NEAR testnet wallet (MyNearWallet, Meteor, HOT, HERE, Intear, NEAR Mobile, or an extension such as Sender, OKX, Nightly, Coin98, Math or WELLDONE; test NEAR from the [faucet](https://near-faucet.io)). The form shows the stake plus the oracle fee and storage before you sign. For Base Sepolia, connect a browser wallet instead; a dispute there needs 0.0011 ETH plus gas from the [Base faucets](https://docs.base.org/get-started/get-funds).
-2. Pick the example "Logo delivered as specified", enter any counterparty account and open the dispute. In about 15 to 20 seconds the page shows three signed YES ballots, the NEAR transaction and the stake back with the claimant; on Base it also shows the MPC-signed Base transaction.
-3. Pick "A matter of taste": two models answer UNKNOWN and one YES, so the verdict is UNKNOWN and the page offers the refund button.
-4. On any answered dispute, "Check it yourself" lists the commands above for that request.
+1. Open [psephex.xyz/app](https://psephex.xyz/app) and choose "Open a dispute". NEAR testnet is the default and opens a court case: connect a NEAR testnet wallet (MyNearWallet, Meteor, HOT, HERE, Intear, NEAR Mobile, or an extension such as Sender, OKX, Bitget, Nightly, Coin98, Math or WELLDONE; test NEAR from the [faucet](https://near-faucet.io)). The form shows the stake, the oracle reserve and the storage before you sign.
+2. Pick the example "Dataset short by 40 rows", enter the seller's account and open the case. The seller answers from its own wallet with "Send the response" within 120 s; if it stays silent, anyone sends the case on after the window. About 9 s later the page shows three signed ballots and the NEAR transaction that checked two of three.
+3. After the 120 s appeal window, "Finalize and pay out" sends the stake by the verdict: YES or UNKNOWN to the claimant, NO to the seller. Either party can appeal to the arbiter before that.
+4. For Base Sepolia or Arbitrum Sepolia, switch the chain and connect a browser wallet. That form opens a one-sided escrow dispute and needs 0.0011 ETH plus gas from the [Base faucets](https://docs.base.org/get-started/get-funds). "Logo delivered as specified" comes back YES in about 20 s through an MPC-signed transaction; "A matter of taste" comes back UNKNOWN and the page offers the refund button.
+5. On any answered request, "Check it yourself" lists the commands above for that request.
 
-The examples were run ten times on every model before they went on the form.
+The escrow examples were run ten times on every model before they went on the form.
 
 ## How it works
 
@@ -131,18 +138,25 @@ Proves:
 - The oracle's rules cannot change under a case. Since 10 November `oracle.psephex.testnet` has no access keys, and a new model key, EVM target, reset of a settled request, higher gas cap or new code is announced on chain with `propose` and runs only 24 hours later, within a seven-day window. New code runs only if its sha256 was announced.
 
 Does not prove:
-- That the answer is right. In request 2 all three models said 9 is a prime number, and the oracle delivered that.
+- That the answer is right. In Base request 2 all three models said 9 is a prime number, and the oracle delivered that.
 - That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.
 - Fully independent operators. Two models run on NEAR AI and one on Phala; on Phala one attested gateway signs for the model it routes to.
 - Knowledge of fresh events. The evidence has to be in the question.
 - Immutable oracle code. The owner `psephex.testnet` (key held offline by the author) can still replace the models or the code in the open, a day after announcing it, and the oracle code decides what the MPC network signs for Base and Arbitrum. The server only has function-call keys of `relayer.psephex.testnet` that can submit answers. `dispute.psephex.testnet`, the v1 example, still has a full-access key.
-- A fixed model set. Qwen3.8 27B answered requests 1 to 10 and was replaced by Gemma on 2026-11-09; `verify_consensus` checks the current set, so those requests are verified by their NEAR and Base transactions.
+- Fixed court parameters. The court owner `psephex.testnet` can change the stake minimum, the appeal bond and the response, appeal and arbitration windows with immediate effect, and a case reads them when it enters each stage. The court has no keys, so its code cannot change.
+- A fixed model set. Qwen3.8 27B answered Base requests 1 to 10 and was replaced by Gemma on 2026-11-09; `verify_consensus` checks the current set, so those requests are verified by their NEAR and Base transactions.
 
 Intel's DCAP signature chain on the TDX quotes was not verified by us; we checked that each quote's report data holds the signing key and our nonce.
 
 ## Run it yourself
 
 From the repository root:
+
+The deployed oracle wasm (sha256 `0f390e19…`) rebuilds from this tree with cargo-near 0.22.0 and rustc 1.96.0:
+
+```bash
+(cd contracts/near && cargo near build non-reproducible-wasm --locked && sha256sum target/near/near_oracle.wasm)
+```
 
 ```bash
 (cd contracts/near && cargo test --locked)
@@ -183,9 +197,9 @@ docs-site        documentation at docs.psephex.xyz (VitePress)
 
 ## Built during the hackathon, libraries and AI
 
-The earliest work on Psephex is the prototype tested on 07 and 08 November 2026, moved into this repository on 08 November (commit `a1e4cef`). Everything else was built from 08 to 10 November; the git history is the record.
+The earliest work on Psephex is the prototype tested on 07 and 08 November 2026, moved into this repository on 08 November (commit `a1e4cef`). Everything else was built from 08 to 11 November; the git history is the record.
 
-Libraries: near-sdk 5.30.1 and omni-transaction 0.5.0 (NEAR contract); forge-std (Base tests); near-api-js 7.4.0, viem 2.57.16, better-sqlite3 13.0.3, pino 10.4.0, Fastify 5.12.8 and @fastify/rate-limit 11.2.1 (relayer and API); React 19.3.1, wagmi 3.7.9, @near-wallet-selector 10.1.4 (MyNearWallet, Meteor, HOT, HERE, Intear, NEAR Mobile, Nightly, Sender, OKX, Coin98, Math, WELLDONE), TanStack Query 5.104.5, react-router 8.5.0, zod 4.6.7 and Tailwind 4.3.3 (web). Models: NEAR AI Cloud and Phala Confidential AI through RedPill.
+Libraries: near-sdk 5.30.1 and omni-transaction 0.5.0 (NEAR contract); forge-std (Base tests); near-api-js 7.4.0, viem 2.57.16, better-sqlite3 13.0.3, pino 10.4.0, Fastify 5.12.8 and @fastify/rate-limit 11.2.1 (relayer and API); React 19.3.1, wagmi 3.7.9, @near-wallet-selector 10.1.4 (MyNearWallet, Meteor, HOT, HERE, Intear, NEAR Mobile, Bitget, Nightly, Sender, OKX, Coin98, Math, WELLDONE), TanStack Query 5.104.5, react-router 8.5.0, zod 4.6.7 and Tailwind 4.3.3 (web); @modelcontextprotocol/sdk 1.32.2 (MCP server); VitePress 1.6.4 (docs). Models: NEAR AI Cloud and Phala Confidential AI through RedPill.
 
 AI assistance: the code, tests and documentation in this repository were written with Claude Code.
 

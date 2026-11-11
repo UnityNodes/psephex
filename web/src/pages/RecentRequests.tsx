@@ -9,10 +9,11 @@ import { Button } from "../components/ui/button.js";
 import { Skeleton } from "../components/ui/skeleton.js";
 import { Tabs, TabsList, TabsTrigger } from "../components/ui/tabs.js";
 import { useRequestPages } from "../hooks.js";
-import { displayText } from "../lib/text.js";
+import { claimFromCourtQuestion, isCourtRequest, requestHeadline, type CourtCaseView } from "../lib/court.js";
 import { timeAgo, tookSeconds } from "../lib/format.js";
 import { useEnter } from "../lib/motion.js";
 import { statusLabel } from "../lib/status.js";
+import { useAllCases } from "../near/court-hooks.js";
 import { SOURCE_SHORT, type Source } from "../sources.js";
 
 const FILTERS: readonly { value: RequestStatus | "all"; label: string }[] = [
@@ -30,9 +31,9 @@ const COLUMNS = "xl:grid xl:grid-cols-[3.5rem_5.5rem_minmax(0,1fr)_8rem_10rem_4r
 function Verdict({ r }: { r: RequestSummary }) {
   if (r.status === "failed" || r.status === "rejected") {
     return (
-      <span className="inline-flex items-center gap-2 text-sm font-medium text-no">
+      <span className="inline-flex items-center gap-2 text-sm font-medium text-muted">
         <CircleX className="size-5" aria-hidden="true" />
-        None
+        No verdict
       </span>
     );
   }
@@ -51,7 +52,7 @@ export function requestPath(r: Pick<RequestSummary, "source" | "id">): string {
   return `/app/r/${r.source}/${r.id}`;
 }
 
-export function RequestRow({ r, selected = false, index = 0 }: { r: RequestSummary; selected?: boolean; index?: number }) {
+export function RequestRow({ r, selected = false, index = 0, cases = [] }: { r: RequestSummary; selected?: boolean; index?: number; cases?: readonly CourtCaseView[] }) {
   const took = tookSeconds(r);
   const enter = useEnter({ opacity: 0, y: 8 }, Math.min(index, MAX_STAGGERED_ROWS) * ROW_STAGGER);
   return (
@@ -66,7 +67,7 @@ export function RequestRow({ r, selected = false, index = 0 }: { r: RequestSumma
           <span className="hidden xl:inline-flex">
             <ChainBadge source={r.source} />
           </span>{" "}
-          <span className="line-clamp-2 xl:line-clamp-1">{displayText(r.question)}</span>
+          <span className="line-clamp-2 xl:line-clamp-1">{requestHeadline(r, cases)}</span>
         </span>
         <span className="flex flex-wrap items-center gap-x-4 gap-y-1 xl:contents">
           <span className="xl:hidden">
@@ -94,11 +95,13 @@ function LoadingRows() {
   );
 }
 
-export function RecentDisputes() {
+export function RecentRequests() {
   const [status, setStatus] = useState<RequestStatus | "all">("all");
   const [source, setSource] = useState<Source | "all">("all");
   const pages = useRequestPages(status === "all" ? undefined : status, source === "all" ? undefined : source);
   const items = pages.data?.pages.flatMap((p) => p.items) ?? [];
+  const needsCases = items.some((r) => isCourtRequest(r) && claimFromCourtQuestion(r.question) === null);
+  const cases = useAllCases(needsCases).data ?? [];
   const params = useParams();
   const selected = `${params.source ?? ""}-${params.id ?? ""}`;
 
@@ -106,7 +109,7 @@ export function RecentDisputes() {
     <section aria-labelledby="recent-heading" className="overflow-hidden rounded-2xl border border-line bg-paper">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
         <h2 id="recent-heading" className="m-0 font-display text-xl font-bold">
-          Recent disputes
+          Recent requests
         </h2>
         <Tabs value={status} onValueChange={(v) => setStatus(v as RequestStatus | "all")} className="w-full sm:w-auto">
           <TabsList aria-label="Show" className="grid h-auto w-full grid-cols-4 bg-stone sm:inline-flex sm:w-auto">
@@ -142,16 +145,16 @@ export function RecentDisputes() {
       </div>
       {pages.isError && <p className="m-0 px-4 py-6 text-sm text-no">The Psephex API did not answer. The list will retry on its own.</p>}
       {pages.isPending && <LoadingRows />}
-      {pages.isSuccess && items.length === 0 && <p className="m-0 px-4 py-6 text-sm text-muted">No disputes here yet. Open the first one.</p>}
+      {pages.isSuccess && items.length === 0 && <p className="m-0 px-4 py-6 text-sm text-muted">No requests here yet.</p>}
       <ul className="m-0 list-none p-0">
         {items.map((r, i) => (
-          <RequestRow key={`${status}-${source}-${r.source}-${r.id}`} r={r} selected={`${r.source}-${r.id}` === selected} index={i} />
+          <RequestRow key={`${status}-${source}-${r.source}-${r.id}`} r={r} selected={`${r.source}-${r.id}` === selected} index={i} cases={cases} />
         ))}
       </ul>
       {pages.hasNextPage && (
         <div className="p-3">
           <Button type="button" variant="ghost" onClick={() => void pages.fetchNextPage()} disabled={pages.isFetchingNextPage}>
-            {pages.isFetchingNextPage ? "Loading…" : "Show older disputes"}
+            {pages.isFetchingNextPage ? "Loading…" : "Show older requests"}
           </Button>
         </div>
       )}

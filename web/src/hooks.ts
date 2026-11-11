@@ -74,8 +74,26 @@ export function useModels() {
   return useQuery({ queryKey: ["models"], queryFn: () => api.models(), staleTime: 60_000 });
 }
 
-export function usePageTitle(title: string): void {
+const DEFAULT_DESCRIPTION = typeof document === "undefined" ? "" : (document.querySelector('meta[name="description"]')?.getAttribute("content") ?? "");
+
+function descriptionMeta(): HTMLMetaElement {
+  const existing = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (existing) return existing;
+  const meta = document.createElement("meta");
+  meta.name = "description";
+  document.head.append(meta);
+  return meta;
+}
+
+/**
+ * The dashboard overlays render a page inside another page, and React runs the child's effect
+ * before the parent's, so the outer page passes null and leaves the title and description to the
+ * page it overlays instead of overwriting them.
+ */
+export function usePageTitle(title: string | null, description?: string): void {
   useEffect(() => {
+    if (title === null) return;
     document.title = title;
-  }, [title]);
+    descriptionMeta().content = description ?? DEFAULT_DESCRIPTION;
+  }, [title, description]);
 }

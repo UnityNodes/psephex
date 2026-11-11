@@ -1,3 +1,7 @@
+---
+description: "The oracle account has no keys: every change to models, chains or code is announced on NEAR and applies only 24 hours later."
+---
+
 # Owner timelock
 
 Since 10 November 2026 the oracle account `oracle.psephex.testnet` has no access keys. The owner, `psephex.testnet`, cannot sign as the oracle or deploy code to it directly. Every change that decides which answers count is announced on chain first and applies only after a delay, so a party with a case in flight sees it coming and can leave before it applies.
@@ -28,7 +32,7 @@ Changing the relayer list, changing the NEAR fee and lowering the gas cap. None 
 
 ## How an upgrade runs
 
-1. The owner calls `propose` with `{"kind":"upgrade","code_sha256":"…","migrate_args":"{…}"}`. Only one open upgrade per code hash is allowed.
+1. The owner calls `propose` with `{"action":{"kind":"upgrade","code_sha256":"…","migrate_args":"{…}"}}`. Only one open upgrade per code hash is allowed.
 2. After 24 hours, the owner calls `execute_upgrade` with the raw wasm as the call input. The contract hashes it and runs only if the sha256 matches an announced, unexpired upgrade.
 3. The deploy and the `migrate` call with the announced arguments run as one batch on the oracle account. If `migrate` fails, the deploy rolls back and the old code keeps answering.
 4. Both `execute_upgrade` and `migrate` refuse while an MPC signature for an EVM delivery is in flight.

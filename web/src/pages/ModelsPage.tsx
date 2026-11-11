@@ -21,7 +21,7 @@ function randomNonce(): string {
 
 export function ModelEntry({ m: model, index = 0 }: { m: ModelView; index?: number }) {
   const enter = useEnter({ opacity: 0, y: 14 }, index * 0.08, 0.4);
-  const [nonce, setNonce] = useState<string | null>(null);
+  const [nonce] = useState(randomNonce);
   const attestation = model.attestation;
   const link = attestation ? attestationUrl(attestation.url) : null;
   const vendor = model.model.includes("/") ? model.model.split("/")[0] : null;
@@ -49,7 +49,7 @@ export function ModelEntry({ m: model, index = 0 }: { m: ModelView; index?: numb
         </p>
         <div className="flex items-start gap-2 rounded-lg border border-vault-line bg-vault p-2 text-vault-ink">
           <code className="min-w-0 flex-1 font-mono text-[11px] leading-relaxed break-all">{model.publicKey}</code>
-          <CopyButton text={model.publicKey} />
+          <CopyButton text={model.publicKey} label={`the ${model.model} public key`} />
         </div>
       </div>
       <div className="mt-auto flex flex-col gap-2 text-sm">
@@ -57,19 +57,16 @@ export function ModelEntry({ m: model, index = 0 }: { m: ModelView; index?: numb
         {attestation && link && (
           <>
             <a
-              href={`${link}${nonce ?? ""}`}
+              href={`${link}${nonce}`}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => setNonce(nonce ?? randomNonce())}
-              onFocus={() => setNonce((n) => n ?? randomNonce())}
-              onMouseEnter={() => setNonce((n) => n ?? randomNonce())}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-line px-4 font-medium transition-colors duration-150 hover:border-bronze hover:text-bronze-text"
             >
               <ShieldCheck className="size-4" aria-hidden="true" />
               Fetch a fresh TEE attestation
             </a>
             <span className="text-xs text-muted">{attestation.howTo}</span>
-            {nonce && <code className="font-mono text-[11px] break-all text-muted">nonce {nonce}</code>}
+            <code className="font-mono text-[11px] break-all text-muted">nonce {nonce}</code>
           </>
         )}
       </div>
@@ -142,7 +139,7 @@ export function OwnerChanges() {
 }
 
 export function ModelsPage() {
-  usePageTitle("The three models - Psephex");
+  usePageTitle("The three models - Psephex", "The three TEE models behind Psephex, the public keys the NEAR contract accepts their signatures from, and a link to fetch a fresh attestation for each.");
   const models = useModels();
   return (
     <article className="mx-auto flex max-w-6xl flex-col gap-8">

@@ -12,3 +12,4 @@ coverage/
 web/test-results/
 web/playwright-report/
 web/public/fonts/
+contracts/base/broadcast/

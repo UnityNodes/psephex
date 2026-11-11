@@ -1,3 +1,7 @@
+---
+description: "Add the Psephex MCP server to any agent with npx @unitynodes/psephex-mcp: 13 tools, spending limits and a typical flow."
+---
+
 # Quickstart for agents
 
 The Psephex MCP server gives any MCP client (Claude Code, Claude Desktop, or your own agent) 13 tools to open and answer cases, check a payment, verify a verdict and look up another agent's record. It talks to NEAR testnet directly and runs over stdio.

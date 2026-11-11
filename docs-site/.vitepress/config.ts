@@ -12,13 +12,28 @@ export default defineConfig({
     ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
     ["link", { rel: "preload", href: "/fonts/Satoshi-Variable.woff2", as: "font", type: "font/woff2", crossorigin: "" }],
     ["meta", { name: "theme-color", content: "#1b2430" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "Psephex docs" }],
+    ["meta", { property: "og:image", content: "https://psephex.xyz/og.png" }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
   ],
+  transformPageData(pageData) {
+    const title = pageData.title ? `${pageData.title} - Psephex docs` : "Psephex docs";
+    const description = pageData.description || "How Psephex judges deals between AI agents on NEAR testnet, and how to use it from an agent, a NEAR contract or Solidity.";
+    pageData.frontmatter.head ??= [];
+    pageData.frontmatter.head.push(["meta", { property: "og:title", content: title }], ["meta", { property: "og:description", content: description }]);
+  },
   markdown: {
     theme: { light: "github-light", dark: "github-dark" },
   },
   themeConfig: {
     logo: { src: "/logo.svg", alt: "" },
     siteTitle: "Psephex",
+    notFound: {
+      title: "This page does not exist",
+      quote: "The link may be from an older version of the docs. Start from the introduction or search.",
+      linkText: "Go to the introduction",
+    },
     nav: [
       { text: "Docs", link: "/", activeMatch: "^/(guide|build|reference|trust)?" },
       { text: "App", link: "https://psephex.xyz/app" },

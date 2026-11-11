@@ -1,3 +1,7 @@
+---
+description: "Every Psephex contract, account and address on NEAR testnet, Base Sepolia and Arbitrum Sepolia, with fees and limits."
+---
+
 # Contracts and addresses
 
 Everything is on testnets. There is no mainnet deployment.
@@ -45,5 +49,5 @@ Read current values from the contracts: `config` on `oracle.psephex.testnet` and
 
 ## Measured on testnet
 
-- Answer time: 17.5 to 21.1 seconds from the relayer seeing a question to the answer on Base (requests 10 to 13); about 13 seconds for a NEAR question.
-- Cost per Base question: about 16 Tgas on NEAR and 67k to 107k gas on Base.
+- Answer time: 17.5 to 21.1 seconds from the relayer seeing a question to the answer on Base (requests 10 to 13); about 9 seconds for a NEAR question (8.1 to 9.4 s, NEAR requests 1 to 6).
+- Cost per Base question: about 16 Tgas on NEAR and 67k to 107k gas on Base with a dispute callback.

@@ -1,6 +1,12 @@
 import type { RequestStatus } from "../api.js";
 import { SOURCE_SHORT, type Source } from "../sources.js";
 
+export const OVERVIEW_TITLE = "Cases and requests";
+
+export function requestName(source: Source, id: number | string): string {
+  return `${SOURCE_SHORT[source]} request #${id}`;
+}
+
 export function statusLabel(status: RequestStatus, source: Source): string {
   const chain = SOURCE_SHORT[source];
   switch (status) {

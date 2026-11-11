@@ -55,18 +55,26 @@ function VerdictBar({ stats }: { stats: Stats }) {
   );
 }
 
+export function statusSummary(s: Pick<Stats, "total" | "byStatus">): string {
+  const answered = s.byStatus.confirmed ?? 0;
+  const stopped = s.byStatus.failed ?? 0;
+  const rejected = s.byStatus.rejected ?? 0;
+  const open = s.total - answered - stopped - rejected;
+  const parts = [`${answered} answered`, stopped > 0 && `${stopped} stopped`, rejected > 0 && `${rejected} rejected`, open > 0 && `${open} in progress`];
+  return parts.filter((p): p is string => typeof p === "string").join(", ");
+}
+
 export function MetricsStrip() {
   const stats = useStats();
   const health = useHealth();
   const state = relayerState(health.data, health.isError);
   const s = stats.data;
-  const stopped = s ? (s.byStatus.failed ?? 0) + (s.byStatus.rejected ?? 0) : 0;
   return (
     <section aria-label="Live numbers" className="grid gap-px overflow-hidden rounded-2xl border border-line bg-line md:grid-cols-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
       <Cell icon={<Gauge className="size-3.5" aria-hidden="true" />} label="Verdicts" lead>
         {s ? <VerdictBar stats={s} /> : <Skeleton className="h-24 w-full" />}
       </Cell>
-      <Cell icon={<Scale className="size-3.5" aria-hidden="true" />} label="Disputes" note={s ? `${s.byStatus.confirmed ?? 0} answered, ${stopped} stopped` : undefined}>
+      <Cell icon={<Scale className="size-3.5" aria-hidden="true" />} label="Requests" note={s ? statusSummary(s) : undefined}>
         {s ? <NumberTicker value={s.total} /> : <Skeleton className="h-8 w-16" />}
       </Cell>
       <Cell icon={<Clock className="size-3.5" aria-hidden="true" />} label="Time to answer" note="Average, from the relayer seeing a question to its answer on chain">

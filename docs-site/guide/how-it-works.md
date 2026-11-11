@@ -1,3 +1,7 @@
+---
+description: "How a Psephex case and an oracle request move through the court, the TEE models, the 2-of-3 check on NEAR and Chain Signatures."
+---
+
 # How it works
 
 Psephex has two layers. The court (`psephex-court.testnet`) holds the stake, collects both sides' evidence and writes the question. The oracle (`oracle.psephex.testnet`) gets that question answered by three models in TEEs, checks the signatures and the two-of-three rule, and keeps the verdict. The court is just one client of the oracle: any NEAR contract, and any contract on Base Sepolia or Arbitrum Sepolia, can ask the oracle directly.

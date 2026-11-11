@@ -201,17 +201,21 @@ export class Court {
   /**
    * Re-runs the 2-of-3 check on the NEAR oracle contract with the signed model answers the
    * Psephex API kept, so an agent can trust a verdict without trusting the API or the relayer.
+   * The question must be the one stored on NEAR: models sign whatever prompt they are given, so
+   * signatures over a different question from a dishonest API would otherwise pass the check.
    */
   async verifyVerdict(requestId: number): Promise<Record<string, unknown>> {
     const res = await fetch(`${this.cfg.apiUrl}/requests/near/${requestId}/verify`, { redirect: "error", signal: AbortSignal.timeout(API_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`the Psephex API has no verification data for NEAR request ${requestId} (${res.status})`);
     const text = await res.text();
     if (text.length > MAX_API_BYTES) throw new Error("the Psephex API answer is too large");
-    const body = JSON.parse(text) as { data?: { near?: { args?: { request_id?: unknown; chain?: unknown } } } };
+    const body = JSON.parse(text) as { data?: { near?: { args?: { request_id?: unknown; chain?: unknown; question?: unknown } } } };
     const args = body.data?.near?.args;
     if (!args) throw new Error(`no verify_consensus arguments for NEAR request ${requestId}`);
     if (args.request_id !== requestId || typeof args.chain !== "string" || !args.chain.startsWith("near:")) throw new Error("the API returned arguments for another request");
-    const onChain = await this.near.view<{ answer?: string | null } | null>(this.cfg.oracle, "near_request", { request_id: requestId });
+    const onChain = await this.near.view<{ answer?: string | null; question?: string } | null>(this.cfg.oracle, "near_request", { request_id: requestId });
+    if (!onChain) throw new Error(`NEAR request ${requestId} does not exist on ${this.cfg.oracle}`);
+    if (args.question !== onChain.question) throw new Error("the API returned a different question than the one stored on NEAR; the signatures would prove nothing about this request");
     const check = await this.near.view<{ ok: boolean; answer: string; reason: string; required: number; votes: unknown }>(this.cfg.oracle, "verify_consensus", args);
     return { request_id: requestId, signatures_ok: check.ok, recomputed_answer: check.answer, stored_answer: onChain?.answer ?? null, matches: check.ok && check.answer === onChain?.answer, required: check.required, votes: check.votes, reason: check.reason || null };
   }

@@ -28,7 +28,7 @@ near contract call-function as-transaction oracle.psephex.testnet ask json-args 
 
 
 export const COURT_CLI_SNIPPET = `# Buyer agent: price the deposit, then open the case
-near contract call-function as-read-only oracle.psephex.testnet ask_deposit json-args '{"question":"<any 2000-byte string>"}' network-config testnet now
+near contract call-function as-read-only oracle.psephex.testnet ask_deposit json-args "{\\"question\\":\\"$(printf 'x%.0s' $(seq 1 2000))\\"}" network-config testnet now
 near contract call-function as-read-only psephex-court.testnet storage_deposit json-args '{"claim":"Delivered 60 of the 100 rows I paid for.","evidence":"Order: 100 rows. companies.csv has 60 data rows."}' network-config testnet now
 
 near contract call-function as-transaction psephex-court.testnet open_case json-args '{"claim":"Delivered 60 of the 100 rows I paid for.","evidence":"Order: 100 rows. companies.csv has 60 data rows.","counterparty":"seller-agent.testnet","oracle_reserve":"<ask_deposit>"}' prepaid-gas '100 Tgas' attached-deposit '<stake + ask_deposit + storage_deposit> NEAR' sign-as buyer-agent.testnet network-config testnet sign-with-keychain send

@@ -1,3 +1,7 @@
+---
+description: "Ask the Psephex oracle from Solidity on Base Sepolia or Arbitrum Sepolia and receive the answer through NEAR Chain Signatures."
+---
+
 # Ask from Base or Arbitrum
 
 Contracts on Base Sepolia and Arbitrum Sepolia ask the same oracle through `AiOracle`. The question is answered by the three models and checked on NEAR, and the NEAR contract signs the delivery transaction through NEAR Chain Signatures. There is no bridge and no oracle key on a server.

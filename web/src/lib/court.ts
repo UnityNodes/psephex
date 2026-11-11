@@ -1,6 +1,7 @@
 import { isNearAccount, NEAR_COURT_CONTRACT } from "../deployment.js";
 import { questionBytes } from "./dispute.js";
 import { describeNearError, formatNear, parseNear } from "./near-dispute.js";
+import { displayText } from "./text.js";
 
 export const DEFAULT_MAX_FIELD_BYTES = 400;
 export const MAX_ORACLE_QUESTION_BYTES = 2000;
@@ -11,6 +12,7 @@ export const ASKING_GAS = 150n * TGAS;
 export const SETTLE_GAS = 50n * TGAS;
 const NS_PER_SECOND = 1_000_000_000n;
 const CONTROL = /\p{Cc}/u;
+const CLAIM_LINE = /\nClaim by [^\n:]+: ("(?:[^"\\\n]|\\.)*")\n/;
 
 export type Stage = "awaiting_response" | "asking" | "awaiting_verdict" | "decided" | "appealed" | "settled" | "refunded";
 export type Winner = "claimant" | "counterparty";
@@ -477,4 +479,38 @@ export function outcomeFor(c: Pick<CourtCase, "stage" | "winner">, account: stri
 
 export function agentCases<T extends CourtCaseView>(account: string, cases: readonly T[]): T[] {
   return cases.filter((c) => isPartyTo(c, account)).sort((a, b) => b.case_id - a.case_id);
+}
+
+export interface RequestText {
+  readonly id: number;
+  readonly source: string;
+  readonly requester: string;
+  readonly question: string;
+}
+
+/**
+ * Anyone can ask the oracle a question worded like the court's template, so a question is read
+ * as a court case only when the court contract itself asked it on NEAR.
+ */
+export function isCourtRequest(r: Pick<RequestText, "source" | "requester">): boolean {
+  return r.source === "near" && r.requester === NEAR_COURT_CONTRACT;
+}
+
+export function claimFromCourtQuestion(question: string): string | null {
+  const quoted = CLAIM_LINE.exec(question)?.[1];
+  if (quoted === undefined) return null;
+  try {
+    const claim: unknown = JSON.parse(quoted);
+    return typeof claim === "string" ? claim : null;
+  } catch {
+    return null;
+  }
+}
+
+export function requestHeadline(r: RequestText, cases: readonly CourtCaseView[] = []): string {
+  if (!isCourtRequest(r)) return displayText(r.question);
+  const known = cases.find((c) => c.request_id === r.id);
+  if (known) return displayText(`Case #${known.case_id}: ${known.claim}`);
+  const claim = claimFromCourtQuestion(r.question);
+  return displayText(claim === null ? r.question : `Court case: ${claim}`);
 }

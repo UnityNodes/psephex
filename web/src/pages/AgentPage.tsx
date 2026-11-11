@@ -89,7 +89,6 @@ function AgentCases({ account, cases }: { account: string; cases: readonly Court
             <CaseRow
               key={c.case_id}
               c={c}
-              short={false}
               note={
                 <>
                   <span className={`font-semibold ${outcome.tone}`}>{outcome.label}</span>
@@ -133,7 +132,7 @@ function AgentRecord({ account }: { account: string }) {
 export function AgentPage() {
   const account = useParams().account ?? "";
   const valid = isNearAccount(account);
-  usePageTitle(valid ? `${account} - Psephex` : "Not found - Psephex");
+  usePageTitle(valid ? `${account} - Psephex` : "Not found - Psephex", valid ? `Court cases on NEAR testnet where ${account} is the claimant or the counterparty, with each verdict and payout.` : undefined);
   if (!valid) return <NotFound />;
   return (
     <div className="mx-auto flex max-w-6xl min-w-0 flex-col gap-6">

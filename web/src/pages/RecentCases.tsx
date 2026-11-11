@@ -13,7 +13,7 @@ const VERDICT_TEXT: Readonly<Record<string, string>> = { YES: "text-yes", NO: "t
  * A link inside a link is invalid HTML and browsers split it, so the row link covers the row
  * through its ::after box and the party links sit above it.
  */
-export function CaseRow({ c, selected = false, note, short = true }: { c: CourtCaseView; selected?: boolean; note?: ReactNode; short?: boolean }) {
+export function CaseRow({ c, selected = false, note }: { c: CourtCaseView; selected?: boolean; note?: ReactNode }) {
   return (
     <li className={`relative flex flex-col gap-1.5 border-b border-line px-4 py-4 transition-colors duration-150 hover:bg-raised/70 ${selected ? "bg-raised shadow-[inset_2px_0_0_var(--bronze)]" : ""}`}>
       <Link to={`/app/case/${c.case_id}`} aria-current={selected ? "page" : undefined} className="flex min-w-0 items-baseline gap-2 after:absolute after:inset-0 after:content-['']">
@@ -26,7 +26,7 @@ export function CaseRow({ c, selected = false, note, short = true }: { c: CourtC
         {c.verdict && <span className={`font-semibold ${VERDICT_TEXT[c.verdict] ?? ""}`}>{c.verdict}</span>}
         <span className="tabular-nums">{formatNear(BigInt(c.amount))} NEAR</span>
         <span className="relative z-10 min-w-0 [overflow-wrap:anywhere]">
-          <AgentLink account={c.claimant} short={short} /> vs <AgentLink account={c.counterparty} short={short} />
+          <AgentLink account={c.claimant} className="inline-block max-w-full" /> vs <AgentLink account={c.counterparty} className="inline-block max-w-full" />
         </span>
       </span>
     </li>

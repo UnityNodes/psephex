@@ -1,3 +1,7 @@
+---
+description: "Endpoints, fields and limits of the read-only Psephex API at psephex.xyz/api."
+---
+
 # Read-only API
 
 Base URL: `https://psephex.xyz/api`

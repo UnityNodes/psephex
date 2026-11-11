@@ -1,19 +1,20 @@
 import { ArrowUpRight } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router";
 import type { RequestDetail } from "../api.js";
 import { Ballots } from "../components/Ballots.js";
 import { ChainBadge } from "../components/ChainBadge.js";
-import { Commands } from "../components/Commands.js";
+import { Commands, toolsUsed } from "../components/Commands.js";
 import { Steps } from "../components/Steps.js";
 import { Badge } from "../components/ui/badge.js";
 import { explorer, NEAR_COURT_CONTRACT, NEAR_DISPUTE_CONTRACT } from "../deployment.js";
 import { evmChain, type EvmChainConfig } from "../evm-chains.js";
 import { useCase, useChainQuestionHash, useSettlementWinner } from "../chain-hooks.js";
 import { usePageTitle, useRequestDetail, useVerifyPlan } from "../hooks.js";
-import { displayText } from "../lib/dispute.js";
-import { statusLabel } from "../lib/status.js";
+import { OVERVIEW_TITLE, requestName, statusLabel } from "../lib/status.js";
 import { ballots, canRefund, deriveProgress, questionMatchesChain, type CaseInfo, type StepKey } from "../lib/steps.js";
+import { isCourtRequest, requestHeadline } from "../lib/court.js";
+import { displayText } from "../lib/text.js";
 import { useCaseByRequest } from "../near/court-hooks.js";
 import { useNearAsker, useNearCase, useNearQuestionHash } from "../near/hooks.js";
 import { EXPLORER_NAME, isSource, SOURCE_NAME, SOURCE_SHORT, type EvmSource, type Source } from "../sources.js";
@@ -22,6 +23,15 @@ import { EvmRefundButton, NearRefundButton } from "./RefundButtons.js";
 
 const ID = /^[1-9]\d{0,14}$/;
 const CLOCK_MS = 5_000;
+
+function toolList(tools: readonly string[]): ReactNode {
+  return tools.map((tool, i) => (
+    <Fragment key={tool}>
+      {i === 0 ? "" : i === tools.length - 1 ? " and " : ", "}
+      <code className="font-mono text-sm">{tool}</code>
+    </Fragment>
+  ));
+}
 
 export function LegacyRequestRedirect() {
   const raw = useParams().id ?? "";
@@ -83,7 +93,8 @@ function RequestView({ source, id, detail, apiError, chain, now }: { source: Sou
   const matches = detail ? questionMatchesChain(detail.question, chain.chainHash) : null;
   const plan = verify.data && verify.data.requestId === id && chain.chainHash && verify.data.questionHash.toLowerCase() === chain.chainHash.toLowerCase() ? verify.data : null;
   const notFound = !chain.caseLoading && chain.missing && detail === null;
-  const title = detail && matches !== false ? displayText(detail.question) : notFound ? "No dispute with this number yet" : `Dispute #${id}`;
+  const title = detail && matches !== false ? requestHeadline(detail) : notFound ? "No request with this number yet" : requestName(source, id);
+  const fullQuestion = detail && matches !== false && isCourtRequest(detail) ? detail.question.split("\n") : null;
   const stopped = detail !== null && (detail.status === "failed" || detail.status === "rejected");
 
   return (
@@ -92,7 +103,7 @@ function RequestView({ source, id, detail, apiError, chain, now }: { source: Sou
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
           <span>
             <Link to="/app" className="underline underline-offset-2 hover:text-bronze-text">
-              Disputes
+              {OVERVIEW_TITLE}
             </Link>{" "}
             / #{id}
           </span>
@@ -110,7 +121,16 @@ function RequestView({ source, id, detail, apiError, chain, now }: { source: Sou
           </p>
         )}
         {notFound && <p className="m-0 text-muted">If you just opened it, wait a few seconds for {SOURCE_NAME[source]} to include the transaction.</p>}
-        {matches === true && <p className="m-0 text-sm text-muted">This text matches the question hash stored on {chainName}.</p>}
+        {fullQuestion && (
+          <div aria-label="The question the models got" role="group" className="flex flex-col gap-1 rounded-lg border border-line bg-paper p-3 font-mono text-xs [overflow-wrap:anywhere]">
+            {fullQuestion.map((line, i) => (
+              <p key={i} className="m-0">
+                {displayText(line)}
+              </p>
+            ))}
+          </div>
+        )}
+        {matches === true && <p className="m-0 text-sm text-muted">{fullQuestion ? "This question" : "This text"} matches the question hash stored on {chainName}.</p>}
         {matches === false && (
           <p role="alert" className="m-0 text-sm text-no">
             The API returned a question that does not match the hash stored on {chainName}, so it is not shown.
@@ -127,7 +147,7 @@ function RequestView({ source, id, detail, apiError, chain, now }: { source: Sou
           <div role="status" className="rounded-xl border border-line border-l-4 border-l-bronze bg-paper p-5">
             {apiError && <p className="m-0 text-no">The Psephex API did not answer. This page retries on its own; the chain data below is still live.</p>}
             {!apiError && (detail !== null || notFound) && <p className="m-0 [overflow-wrap:anywhere]">{outcomeText(progress.outcome, chain.caseInfo, detail, now, source)}</p>}
-            {!apiError && detail === null && !notFound && <p className="m-0 text-muted">Loading the dispute…</p>}
+            {!apiError && detail === null && !notFound && <p className="m-0 text-muted">Loading the request…</p>}
             {progress.outcome === "settled" && chain.settledLink && (
               <a href={chain.settledLink} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm underline underline-offset-2 hover:text-bronze-text">
                 Dispute contract on {EXPLORER_NAME[source]}
@@ -139,7 +159,7 @@ function RequestView({ source, id, detail, apiError, chain, now }: { source: Sou
 
         <section aria-labelledby="path-heading">
           <h2 id="path-heading" className="m-0 mb-6 font-display text-2xl font-semibold">
-            The path of this dispute
+            The path of this request
           </h2>
           <Steps steps={progress.steps} links={stepLinks(detail)} />
         </section>
@@ -156,8 +176,7 @@ function RequestView({ source, id, detail, apiError, chain, now }: { source: Sou
               : plan.available
                 ? `These commands re-run the signature and 2-of-3 check on the NEAR contract and read the answer from ${chainName}.`
                 : `The model signatures cannot be re-checked here; these commands confirm the question and the result on ${chainName}.`}{" "}
-            They need <code className="font-mono text-sm">near</code>
-            {source === "near" ? "" : <>, <code className="font-mono text-sm">cast</code></>} and <code className="font-mono text-sm">jq</code>, and trust nothing but the chains.
+            They need {toolList(toolsUsed(plan))}, and trust nothing but the chains.
           </p>
           <Commands plan={plan} />
         </section>
@@ -211,17 +230,17 @@ export function RequestPage() {
   const valid = source !== null && ID.test(raw);
   const id = valid ? Number(raw) : 0;
   const now = useNowSeconds();
-  usePageTitle(valid ? `Dispute #${id} - Psephex` : "Not found - Psephex");
+  usePageTitle(valid ? `${requestName(source, id)} - Psephex` : "Not found - Psephex", valid ? `${requestName(source, id)} on Psephex: the model votes, the path through ${source === "near" ? "NEAR" : `${SOURCE_NAME[source]} and NEAR`}, and commands to check it on chain.` : undefined);
 
   if (!valid) {
     return (
       <p>
-        There is no dispute with this number. <Link to="/app">Open a dispute</Link>.
+        There is no request with this number. <Link to="/app">See the recent requests</Link>.
       </p>
     );
   }
   if (source === "near") return <NearRequest key={id} id={id} now={now} />;
   const cfg = evmChain(source as EvmSource);
-  if (!cfg) return <p>{SOURCE_NAME[source]} is not configured in this build, so its disputes cannot be read here.</p>;
+  if (!cfg) return <p>{SOURCE_NAME[source]} is not configured in this build, so its requests cannot be read here.</p>;
   return <EvmRequest key={`${source}-${id}`} cfg={cfg} id={id} now={now} />;
 }

@@ -1,3 +1,7 @@
+---
+description: "Short answers about Psephex: timing, cost, models, appeals, trust and what runs on testnet."
+---
+
 # FAQ
 
 ## Is this on mainnet?
@@ -6,7 +10,7 @@ No. Psephex runs on NEAR testnet, Base Sepolia and Arbitrum Sepolia only. Use te
 
 ## How long does a verdict take?
 
-About 13 seconds for a question asked on NEAR, and 17.5 to 21.1 seconds for one asked on Base, measured from the relayer seeing the question to the answer on chain. A court case also waits for the response window before the question is asked, and for the appeal window before the payout.
+About 9 seconds for a question asked on NEAR, and 17.5 to 21.1 seconds for one asked on Base, measured from the relayer seeing the question to the answer on chain. A court case also waits for the response window before the question is asked, and for the appeal window before the payout.
 
 ## What does it cost?
 

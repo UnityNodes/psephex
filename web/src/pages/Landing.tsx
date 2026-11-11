@@ -8,6 +8,7 @@ import { CodePanel } from "../components/CodePanel.js";
 import { ForDevelopers } from "../components/ForDevelopers.js";
 import { SiteFooter } from "../components/SiteFooter.js";
 import { SiteHeader } from "../components/SiteHeader.js";
+import { MAIN_ID, SkipLink } from "../components/SkipLink.js";
 import { Button } from "../components/ui/button.js";
 import { NumberTicker } from "../components/ui/number-ticker.js";
 import { DOCS_URL } from "../deployment.js";
@@ -67,9 +68,11 @@ const PROVES: readonly string[] = [
   "At least two of the three signed answers agree. The NEAR contract checks this, not our server.",
   "The models saw the request the NEAR contract built from the stored question, with temperature 0 and a fixed seed inside the signed request.",
   "On Base and Arbitrum, only the MPC-derived address can deliver the answer, and only for the matching id and question. There is no bridge and no oracle key on a server.",
-  "Answers repeat in practice: 80 of 80 repeats matched in our first check, and 90 of 90 for the dashboard examples.",
+  "Answers repeat in practice: 80 of 80 repeats matched in our first check, 90 of 90 for the dashboard examples on NEAR AI and 30 of 30 on Phala.",
   "The rules cannot change under a case. A new model set, chain target or oracle code is announced on NEAR and applies only 24 hours later, and the oracle account has no keys, so that announcement is the only way in.",
 ];
+
+const LANDING_DESCRIPTION = "A judge for deals between AI agents on NEAR: both sides file evidence, three TEE models decide, the NEAR contract checks two of three and enforces the payout, and Base and Arbitrum get the verdicts through Chain Signatures.";
 
 function Count({ n, word }: { n: number; word?: string }) {
   return (
@@ -87,7 +90,7 @@ function NumbersLine({ stats }: { stats: Stats }) {
     <div className="flex flex-col gap-3">
       <p className="m-0 max-w-[30ch] font-display text-3xl leading-tight font-medium text-muted sm:text-4xl">
         <span className="text-ink">
-          <Count n={stats.total} word="dispute" />
+          <Count n={stats.total} word="request" />
         </span>{" "}
         so far,{" "}
         <span className="text-ink">
@@ -183,7 +186,7 @@ function Limits() {
             <span>
             That the answer is right. In{" "}
             <Link to="/app/r/base/2" className="underline underline-offset-2 hover:text-bronze-text">
-              dispute #2
+              Base request #2
             </Link>{" "}
             all three models said 9 is a prime number, and the oracle delivered that. The models can be wrong about a deal too, which is why the court has an appeal.</span>
           </li>
@@ -291,18 +294,22 @@ function HeroPath() {
 }
 
 export function Landing() {
-  usePageTitle("Psephex: a judge for deals between AI agents, on NEAR");
+  usePageTitle("Psephex: a judge for deals between AI agents, on NEAR", LANDING_DESCRIPTION);
   return (
     <div className="basalt-glow min-h-dvh">
+      <SkipLink />
       <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-4 sm:px-8">
         <SiteHeader
           end={
-            <Button asChild variant="outline" className="hidden sm:inline-flex">
-              <Link to="/app">Open the dashboard</Link>
+            <Button asChild variant="outline">
+              <Link to="/app">
+                <span className="sm:hidden">Dashboard</span>
+                <span className="hidden sm:inline">Open the dashboard</span>
+              </Link>
             </Button>
           }
         >
-          <nav aria-label="Main" className="flex flex-wrap items-center gap-x-5 text-sm">
+          <nav aria-label="Main" className="hidden items-center gap-x-5 text-sm lg:flex">
             <a href="#how" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink">
               How it works
             </a>
@@ -317,13 +324,10 @@ export function Landing() {
                 Docs
               </a>
             )}
-            <Link to="/app" className="inline-flex min-h-11 items-center text-muted transition-colors duration-150 hover:text-ink sm:hidden">
-              Dashboard
-            </Link>
           </nav>
         </SiteHeader>
 
-        <main className="flex flex-col gap-24 pt-10 pb-24 sm:pt-14">
+        <main id={MAIN_ID} tabIndex={-1} className="flex scroll-mt-6 flex-col gap-24 pt-10 pb-24 outline-none sm:pt-14">
           <div className="flex flex-col gap-10">
             <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-16">
               <HeroTitle text="A judge for deals between AI agents, running on NEAR." />

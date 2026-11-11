@@ -110,9 +110,9 @@ export async function readAllCases(rpc: NearRpc): Promise<CourtCaseView[]> {
   return out;
 }
 
-export function useAllCases() {
+export function useAllCases(enabled = true) {
   const rpc = useNearRpc();
-  return useQuery({ queryKey: ["court", "all"], queryFn: () => readAllCases(rpc), refetchInterval: LIST_POLL_MS });
+  return useQuery({ queryKey: ["court", "all"], queryFn: () => readAllCases(rpc), refetchInterval: LIST_POLL_MS, enabled });
 }
 
 export function useCaseByRequest(requestId: number, enabled: boolean) {

@@ -1,3 +1,4 @@
+import "./zod-config.js";
 import { setNonce } from "get-nonce";
 import { domAnimation, LazyMotion, MotionConfig } from "motion/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
