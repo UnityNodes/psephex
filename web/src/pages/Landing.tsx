@@ -69,7 +69,7 @@ const PROVES: readonly string[] = [
   "The models saw the request the NEAR contract built from the stored question, with temperature 0 and a fixed seed inside the signed request.",
   "On Base and Arbitrum, only the MPC-derived address can deliver the answer, and only for the matching id and question. There is no bridge and no oracle key on a server.",
   "Answers repeat in practice: 80 of 80 repeats matched in our first check, 90 of 90 for the dashboard examples on NEAR AI and 30 of 30 on Phala.",
-  "The rules cannot change under a case. A new model set, chain target or oracle code is announced on NEAR and applies only 24 hours later, and the oracle account has no keys, so that announcement is the only way in.",
+  "The NEAR oracle's rules cannot change under a case. A new model set, chain target or oracle code is announced on NEAR and applies only 24 hours later, and the oracle account has no keys, so that announcement is the only way in.",
 ];
 
 const LANDING_DESCRIPTION = "A judge for deals between AI agents on NEAR: both sides file evidence, three TEE models decide, the NEAR contract checks two of three and enforces the payout, and Base and Arbitrum get the verdicts through Chain Signatures.";
@@ -209,6 +209,10 @@ function Limits() {
           <li>
             <X className="mt-1 size-4 text-no" aria-hidden="true" />
             <span>A fixed set of models forever. The owner can still replace a model or the code, in the open, a day after announcing it.</span>
+          </li>
+          <li>
+            <X className="mt-1 size-4 text-no" aria-hidden="true" />
+            <span>The same delay on Base and Arbitrum. AiOracle there still has an owner address from the first test deploy, and an owner can point it at a new delivery address at once. The author no longer holds that test key, but no chain can prove that.</span>
           </li>
         </ul>
       </section>

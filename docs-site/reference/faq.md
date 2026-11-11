@@ -38,7 +38,7 @@ At least two models answered UNKNOWN, or no answer got two votes. The court pays
 
 ## Can the operator change the rules in the middle of my case?
 
-Not without warning. The oracle account has no keys, and every change to the models, the EVM targets, settled requests, the gas cap or the code waits 24 hours after it is announced on chain. See [owner timelock](/trust/owner-timelock). The court's code cannot change at all; its owner can change the windows, stake, bond and arbiter, and a live appeal keeps the arbiter it was filed under.
+Not without warning. The oracle account has no keys, and every change to the models, the EVM targets, settled requests, the gas cap or the code waits 24 hours after it is announced on chain. See [owner timelock](/trust/owner-timelock). On Base and Arbitrum, AiOracle still has an owner address that could change the delivery address at once; see the [security model](/trust/security-model). The court's code cannot change at all; its owner can change the windows, stake, bond and arbiter, and a live appeal keeps the arbiter it was filed under.
 
 ## Do I need your API?
 

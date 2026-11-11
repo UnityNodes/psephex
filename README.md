@@ -142,6 +142,7 @@ Does not prove:
 - That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.
 - Fully independent operators. Two models run on NEAR AI and one on Phala; on Phala one attested gateway signs for the model it routes to.
 - Knowledge of fresh events. The evidence has to be in the question.
+- The same delay on Base and Arbitrum. AiOracle on both has the owner `0x06280879748d27F682b14830B1AfEf0d7AF223E2`, a test key from the first deploy on 8 November. An owner can replace the delivery address (`setOracle`) or the fee at once, outside the NEAR delay. The author no longer holds that key, which no chain can show.
 - Immutable oracle code. The owner `psephex.testnet` (key held offline by the author) can still replace the models or the code in the open, a day after announcing it, and the oracle code decides what the MPC network signs for Base and Arbitrum. The server only has function-call keys of `relayer.psephex.testnet` that can submit answers. `dispute.psephex.testnet`, the v1 example, still has a full-access key.
 - Fixed court parameters. The court owner `psephex.testnet` can change the stake minimum, the appeal bond and the response, appeal and arbitration windows with immediate effect, and a case reads them when it enters each stage. The court has no keys, so its code cannot change.
 - A fixed model set. Qwen3.8 27B answered Base requests 1 to 10 and was replaced by Gemma on 2026-11-09; `verify_consensus` checks the current set, so those requests are verified by their NEAR and Base transactions.

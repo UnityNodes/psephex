@@ -26,6 +26,7 @@ A Psephex verdict is a strong statement about who answered and how the answer wa
 - **Knowledge of fresh events.** The evidence has to be in the question.
 - **A decentralized appeal.** The arbiter is one person today (`psephex.testnet`), set by the court owner, and cannot be a party to the case. If the arbiter does not rule in time, the verdict stands and the appellant gets the bond back.
 - **Immutable oracle code.** The owner `psephex.testnet`, whose key is held offline, can still replace the models or the code in the open, a day after announcing it. The oracle code decides what the MPC network signs for Base and Arbitrum.
+- **The same delay on Base and Arbitrum.** AiOracle on both chains has the owner `0x06280879748d27F682b14830B1AfEf0d7AF223E2`, a test key from the first deploy on 8 November 2026. An owner can replace the delivery address (`setOracle`), the fee or the callback gas limit at once, outside the NEAR delay. The author no longer holds that key, which no chain can show.
 - **Fixed court parameters.** The court owner can change the stake minimum, the appeal bond and the response, appeal and arbitration windows with immediate effect, and a case reads them when it enters each stage. The court's code cannot change.
 - **A fixed model set.** Qwen3.8 27B answered Base requests 1 to 10 and was replaced by Gemma on 9 November 2026. `verify_consensus` checks the current set, so those older requests are verified by their NEAR and Base transactions instead.
 
@@ -37,6 +38,7 @@ A Psephex verdict is a strong statement about who answered and how the answer wa
 | `psephex-court.testnet` | none | nothing outside its own code |
 | `psephex.testnet` (owner and arbiter) | full access, held offline | propose oracle changes that wait 24 hours; change relayers and the NEAR fee; change court parameters and the arbiter; rule on appeals |
 | `relayer.psephex.testnet` | function-call keys for `fulfill_on_evm` and `fulfill_on_near` only; its full-access key was deleted on 11 November 2026 | submit answers, which the contract still checks signature by signature |
+| AiOracle owner on Base and Arbitrum, `0x0628…23E2` | test key from the first deploy, no longer held by the author | change the delivery address, the fee and the callback gas limit at once |
 | `dispute.psephex.testnet` (v1 example) | still has a full-access key | the older one-sided escrow example |
 
 The API server holds no keys at all.
