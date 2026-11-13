@@ -44,6 +44,7 @@ Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with 
 | Live | [psephex.xyz](https://psephex.xyz) (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. |
 | Answer time | 17.5 to 21.1 s from the relayer seeing a question to the answer on Base (requests 10 to 13); about 9 s for a NEAR question (8.1 to 9.4 s, NEAR requests 1 to 6) |
 | Cost per question | NEAR: 0.01 NEAR fee plus 0.003 to 0.023 NEAR storage, by question length. Base: 0.0001 ETH fee, about 16 Tgas on NEAR, 67k to 107k gas on Base with a dispute callback |
+| Forgeries refused | 12 of 12 on the live contracts, one of them copy-paste: [try to forge a verdict](#try-to-forge-a-verdict) |
 | Tests | NEAR oracle 161, NEAR court 47, NEAR dispute 19, Base 79, relayer and API 241, web 163, MCP 23 |
 
 ## Use it three ways
@@ -53,6 +54,36 @@ Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with 
 | **An agent on the court** | Claude, Cursor or any MCP client that buys or sells work | `claude mcp add psephex -- npx -y @unitynodes/psephex-mcp`, then [the agent quickstart](https://docs.psephex.xyz/guide/agents) |
 | **A NEAR contract** | Any contract that needs a yes or no it can trust | `ask` with `ask_deposit(question)` attached and `on_answer(request_id, answer)`, see [Ask from a NEAR contract](https://docs.psephex.xyz/build/near-contract) |
 | **A Base or Arbitrum contract** | Solidity apps that want the same verdict | `ask` on AiOracle with the fee and `onAnswer`, see [Ask from Base or Arbitrum](https://docs.psephex.xyz/build/evm) |
+
+## Try to forge a verdict
+
+The API and the relayer only carry signed answers; the NEAR contract decides whether they count. On 13 November 2026 we took the real answers to NEAR request 1 (YES, 3 of 3) and Base request 11, forged them in every way we could think of, and sent them to the live contracts. Every attempt was refused:
+
+| Forgery | Refused by | Reason |
+|---|---|---|
+| Change one model's answer from YES to NO | NEAR oracle | `invalid signature` |
+| Change two answers to flip the majority | NEAR oracle | `invalid signature` |
+| Swap two models' signatures | NEAR oracle | `invalid signature` |
+| Keep the answers, make the question stricter | NEAR oracle | `invalid signature` |
+| Reuse the answers for another request | NEAR oracle | `invalid signature` |
+| Reuse the answers for another chain | NEAR oracle | `invalid signature` |
+| Leave out one model's answer | NEAR oracle | `answers must cover every registered model exactly once` |
+| Count one model twice | NEAR oracle | `answers must cover every registered model exactly once` |
+| Put in a model not registered on NEAR | NEAR oracle | `answers must cover every registered model exactly once` |
+| Deliver an answer to Base from any address but the MPC one | AiOracle on Base | `OnlyOracle` |
+| Deliver a second answer to Base request 11 from the MPC address | AiOracle on Base | `AlreadyFulfilled(11)` |
+| Call the Base escrow's `onAnswer` directly | Dispute on Base | `OnlyOracle` |
+
+Try the first one yourself. These are read-only calls: no wallet, no gas.
+
+```bash
+curl -s 'https://psephex.xyz/api/requests/near/1/verify' | jq '.data.near.args' > real.json
+jq '.answers[1].response_body |= sub("\"content\":\"YES\""; "\"content\":\"NO\"")' real.json > forged.json
+near contract call-function as-read-only oracle.psephex.testnet verify_consensus file-args forged.json network-config testnet now
+```
+Expect `"ok": false` and `deepseek-ai/DeepSeek-V4.1-Flash-1017: invalid signature`. Run the same command on `real.json` and it returns `"ok": true`, `"answer": "YES"`.
+
+A party cannot steer the court through its own evidence either. The court quotes each side's text as a JSON string after a line telling the models to treat it only as evidence, and a newline inside a text cannot start a forged line (`contracts/near-court/src/tests.rs`).
 
 ## Deployed contracts
 
@@ -114,7 +145,7 @@ cast tx 0x427d1002f44249de44cd038d48a99d0236a08554192ada74b5c1218093107a6d from 
 ```
 Expect `0x3A915e664Bc3c87954b9C1CaD2146B44A8a2e35F`: the answer was delivered by the MPC-derived address, which no person holds a key for.
 
-The API only hands over the arguments; the check runs on the NEAR contract. Change one character of a `response_body` in either JSON file and run its `verify_consensus` again: it returns `"ok": false` with `invalid signature`. Swap the `chain` field between the two files and the signatures fail too: an answer signed for one source does not verify for another.
+The API only hands over the arguments; the check runs on the NEAR contract. Change one character of a `response_body` in either JSON file and `verify_consensus` returns `"ok": false` with `invalid signature`; the full list of forgeries we tried is in [Try to forge a verdict](#try-to-forge-a-verdict).
 
 **The owner's hands are tied.** The oracle account has no keys, so code changes only through an announced upgrade:
 
