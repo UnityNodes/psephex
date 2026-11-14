@@ -24,6 +24,33 @@ Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with 
 > [!TIP]
 > Agents pay each other for work, and someone has to decide whether the work was done. Today that means trusting one operator's server and one model, and letting whoever writes the question decide the answer. In Psephex both sides write their own evidence, the court contract writes the question, the model answers are attestable, the 2-of-3 rule is enforced on chain, a wrong verdict can be appealed, and every verdict since the current model set (all NEAR requests, Base 11 and later, Arbitrum 1) can be re-checked by anyone with two CLI commands.
 
+## Verify in 60 seconds
+
+You need `near` (near-cli-rs), `curl` and `jq`. Both calls only read: no wallet, no gas.
+
+```bash
+curl -s 'https://psephex.xyz/api/requests/near/1/verify' | jq '.data.near.args' > verify-near-1.json
+near contract call-function as-read-only oracle.psephex.testnet verify_consensus file-args verify-near-1.json network-config testnet now
+```
+
+Output of that call on 14 November 2026:
+
+```json
+{
+  "answer": "YES",
+  "ok": true,
+  "reason": "",
+  "required": 2,
+  "votes": [
+    { "answer": "YES", "model": "Qwen/Qwen3.6-35B-A3B-FP8" },
+    { "answer": "YES", "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017" },
+    { "answer": "YES", "model": "phala/gemma-4-26b-a4b-uncensored" }
+  ]
+}
+```
+
+The contract checked each model's signature against the keys registered on NEAR; `required` is the number of matching answers it needs, and all three said YES. The API only supplied the arguments: [check that the question is the one NEAR stored](#check-a-real-answer-yourself-without-our-servers), or change one character and watch the same call refuse it in [Try to forge a verdict](#try-to-forge-a-verdict).
+
 ## How a case runs
 
 <p align="center">
@@ -40,7 +67,7 @@ Underneath is a general yes-or-no oracle. Any NEAR contract can call `ask` with 
 | | |
 |---|---|
 | Ask from | NEAR testnet (pay in NEAR), Base Sepolia 84532 and Arbitrum Sepolia 421614 (pay in ETH). Testnet only. |
-| Models | DeepSeek V4.1 Flash and Qwen3.6 35B on NEAR AI Cloud, Gemma 4 26B on Phala. Two of three must agree. |
+| Models | DeepSeek V4.1 Flash and Qwen3.6 35B on NEAR AI Cloud, Gemma 4 26B on Phala. All three must return a signed answer; two of the three must agree. |
 | Live | [psephex.xyz](https://psephex.xyz) (landing), [psephex.xyz/app](https://psephex.xyz/app) (dashboard), [psephex.xyz/api/health](https://psephex.xyz/api/health) (read-only API), [docs.psephex.xyz](https://docs.psephex.xyz) (documentation). Testnet only. |
 | Answer time | 17.5 to 21.1 s from the relayer seeing a question to the answer on Base (requests 10 to 13); about 9 s for a NEAR question (8.1 to 9.4 s, NEAR requests 1 to 6) |
 | Cost per question | NEAR: 0.01 NEAR fee plus 0.003 to 0.023 NEAR storage, by question length. Base: 0.0001 ETH fee, about 16 Tgas on NEAR, 67k to 107k gas on Base with a dispute callback |
@@ -83,7 +110,29 @@ near contract call-function as-read-only oracle.psephex.testnet verify_consensus
 ```
 Expect `"ok": false` and `deepseek-ai/DeepSeek-V4.1-Flash-1017: invalid signature`. Run the same command on `real.json` and it returns `"ok": true`, `"answer": "YES"`.
 
+The same refusals are unit tests that CI runs on every push, green in [run 43466924990](https://github.com/UnityNodes/psephex/actions/runs/43466924990) (jobs [`near (contracts/near)`](https://github.com/UnityNodes/psephex/actions/runs/43466924990/job/132028419160) and [`base`](https://github.com/UnityNodes/psephex/actions/runs/43466924990/job/132028419589)):
+
+- changed answer, question or request: [`tampered_response_fails`](contracts/near/src/tests/mod.rs#L183), [`different_question_or_request_id_fails`](contracts/near/src/tests/mod.rs#L213), [`consensus_rejects_any_bad_signature`](contracts/near/src/tests/mod.rs#L1497), [`consensus_rejects_signature_by_other_models_key`](contracts/near/src/tests/mod.rs#L1512);
+- another chain: [`answer_signed_for_one_chain_fails_on_another`](contracts/near/src/tests/mod.rs#L845);
+- missing, doubled or unregistered model: [`consensus_requires_every_registered_model_exactly_once`](contracts/near/src/tests/mod.rs#L1452), [`consensus_rejects_unregistered_model`](contracts/near/src/tests/mod.rs#L1484);
+- Base: [`test_fulfill_fromNonOracleReverts`](contracts/base/test/AiOracle.t.sol#L127), [`test_fulfill_replayReverts`](contracts/base/test/AiOracle.t.sol#L172), [`test_dispute_onAnswer_onlyOracleContract`](contracts/base/test/AiOracle.t.sol#L338).
+
+The forgeries in the table were read-only calls, so they left no transactions. A refusal that did land on chain is in [Transactions to look at](#transactions-to-look-at).
+
 A party cannot steer the court through its own evidence either. The court quotes each side's text as a JSON string after a line telling the models to treat it only as evidence, and a newline inside a text cannot start a forged line (`contracts/near-court/src/tests.rs`).
+
+## Transactions to look at
+
+Real testnet transactions, read from the chain; each link opens the transaction with its logs.
+
+| What happened | Transaction | What it shows |
+|---|---|---|
+| A verdict by 2 of 3 | [`7446TGox…2jh`](https://testnet.nearblocks.io/txns/7446TGox2aE5mDKqZjWUVsfcxyBK6C83V9ooCR2WV2jh) | `fulfill_on_near` for NEAR request 4: Gemma YES, DeepSeek UNKNOWN, Qwen3.6 YES, verdict YES. The same transaction calls the court, which logs `decided` YES for case 1. |
+| An appeal | [`F7WjAYxd…6ws`](https://testnet.nearblocks.io/txns/F7WjAYxdtbuKndFoTptXYfdoTto2SqSwF1SnQpTN76ws) | The seller agent appeals case 1 to the arbiter `psephex.testnet` with a 0.02 NEAR bond. |
+| The court pays after a silent arbiter | [`38eqcf6Z…imW`](https://testnet.nearblocks.io/txns/38eqcf6ZHQoJWsrMT3p2rvHSiC2NtDD35zrx3w2jSimW) | The arbiter did not rule within its window; `finalize` pays the buyer by the verdict (`verdict_after_silent_arbiter`) and returns the bond to the appellant. |
+| The court refuses an early payout | [`DjneqyGN…L2YXv`](https://testnet.nearblocks.io/txns/DjneqyGNctvFtnPv86H3oUzQ5ytFUi8dnZCh9vvL2YXv) | The seller agent calls `finalize` on case 4 while the appeal window is open; the contract panics with `the appeal window is still open`. |
+| Two LLM agents settle | [`HNrbS7bB…ofg`](https://testnet.nearblocks.io/txns/HNrbS7bB6SWysRn1Qc5QSTugnpDsqdHKpEndohDxDofg) | Case 4, NEAR request 6, YES 3 of 3: `finalize` pays the stake to the buyer agent (`by: verdict`). |
+| A verdict delivered to Base by MPC | [`0x427d1002…7a6d`](https://sepolia.basescan.org/tx/0x427d1002f44249de44cd038d48a99d0236a08554192ada74b5c1218093107a6d) | Base request 11, sent from the MPC-derived address `0x3A91…e35F`. |
 
 ## Deployed contracts
 
@@ -191,7 +240,7 @@ The escrow examples were run ten times on every model before they went on the fo
 
 1. **The question is recorded.** From NEAR, a person or contract calls `oracle.psephex.testnet.ask(question, callback)` with a NEAR deposit; the contract stores the question and emits `asked`. From Base, a contract calls `AiOracle.ask(question)` with the fee; Base stores the question hash and emits `Asked`.
 2. **Three models answer in TEEs.** The relayer asks the NEAR contract to build the exact request (temperature 0, fixed seed, the request id and the source inside the prompt: the NEAR contract account, or the AiOracle address and EVM chain id) and sends those bytes to each model. NEAR AI models sign `model:sha256(request):sha256(response)` with their own key; on Phala the attested Dstack gateway signs `sha256(request):sha256(response)`.
-3. **NEAR checks two of three.** `fulfill_on_near` or `fulfill_on_evm` rebuilds the request, verifies every signature against the keys registered on NEAR and needs two matching answers. For a NEAR question it takes the question from its own state, so the relayer cannot change it.
+3. **NEAR checks two of three.** `fulfill_on_near` or `fulfill_on_evm` rebuilds the request, needs a signed answer from each of the three registered models, verifies every signature against the keys registered on NEAR and needs two matching answers. For a NEAR question it takes the question from its own state, so the relayer cannot change it.
 4. **NEAR keeps the verdict, or MPC signs it for an EVM chain.** A NEAR question ends here: the verdict and votes are stored in the contract and `on_answer(request_id, answer)` is called on the asker when it asked for a callback; `dispute.psephex.testnet` pays out from that call. For Base the contract builds the EIP-1559 transaction and asks `v1.signer-prod.testnet` to sign it; the relayer only carries signed bytes.
 5. **Base pays out.** `AiOracle.fulfill` accepts the answer only from the MPC address and only for the matching request id and question hash, then calls the asking contract. Both dispute contracts pay the claimant on YES, the counterparty on NO, and allow a refund on UNKNOWN or after the timeout.
 
@@ -217,6 +266,7 @@ The relayer (`relayer/`) is a crash-safe state machine over SQLite: killed with 
 - That asking again is impossible. Temperature 0 and the seed make repeats match in practice, not cryptographically.
 - Fully independent operators. Two models run on NEAR AI and one on Phala; on Phala one attested gateway signs for the model it routes to.
 - Knowledge of fresh events. The evidence has to be in the question.
+- A verdict while a provider is down. "Two of three" counts matching answers, not answering models: `verify_consensus` ([`contracts/near/src/lib.rs`](contracts/near/src/lib.rs#L654)) needs a validly signed answer from each of the three registered models, and counts a signed answer it cannot parse as UNKNOWN. If NEAR AI Cloud (two models) or Phala (one) is down, no verdict can be recorded until it is back or the owner replaces that model through `propose`, which takes 24 hours. A court case then waits, and after its answer timeout (600 s on testnet) anyone can call `refund`, which returns the stake to the claimant. A Base or Arbitrum dispute allows a refund after its 300 s timeout.
 - The same delay on Base and Arbitrum. AiOracle on both has the owner `0x06280879748d27F682b14830B1AfEf0d7AF223E2`, a test key from the first deploy on 8 November. An owner can replace the delivery address (`setOracle`) or the fee at once, outside the NEAR delay. The author no longer holds that key, which no chain can show.
 - Immutable oracle code. The owner `psephex.testnet` (key held offline by the author) can still replace the models or the code in the open, a day after announcing it, and the oracle code decides what the MPC network signs for Base and Arbitrum. The server only has function-call keys of `relayer.psephex.testnet` that can submit answers. `dispute.psephex.testnet`, the v1 example, still has a full-access key.
 - Fixed court parameters. The court owner `psephex.testnet` can change the stake minimum, the appeal bond and the response, appeal and arbitration windows with immediate effect, and a case reads them when it enters each stage. The court has no keys, so its code cannot change.

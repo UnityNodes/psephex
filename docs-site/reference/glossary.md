@@ -32,7 +32,7 @@ description: "The terms used across Psephex: case, request, verdict, appeal, TEE
 
 **TEE.** Trusted execution environment, hardware that runs code in an enclave and can prove which code and key it holds. The models answer and sign inside TEEs.
 
-**Two of three.** The oracle needs two matching signed answers out of the three registered models.
+**Two of three.** The oracle needs a signed answer from each of the three registered models, and two of those answers must match.
 
 **Verdict.** YES, NO or UNKNOWN, as stored by the oracle and passed to the asker.
 
